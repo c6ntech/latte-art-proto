@@ -4,7 +4,7 @@ export const LEVEL = {
   gravity: 1.0,           // 重力倍率（影響牛奶落下的推開力道與噴流強度）
   cupShape: [1.0, 1.0],   // 容器形狀：杯面橢圓的 x/y 比例，[1,1] 是圓杯
   viscosity: 1.0,         // 液體黏度倍率（越高流場衰減越快、擴散越慢）
-  cupDisturbance: 0.0,    // 杯子受到的干擾 0..1（液面飄移、晃動）
+  cupDisturbance: 0.0,    // 杯子受到的干擾 0..1（在基本飄移之上再加快、加大）
   pitcherDisturbance: 0.0 // 奶泡鋼杯受到的干擾 0..1（風吹偏、手抖）
 };
 
@@ -15,6 +15,9 @@ export const TUNING = {
   // 甜蜜點：杯面上的橢圓（杯子座標，y 往上為負），rx/ry 是半徑（R）
   target: { x: 0, y: -0.22, rx: 0.3, ry: 0.48 },
   passRatio: 0.8,
+  // 杯子難平衡：杯子會自己慢慢飄走，玩家要用傾斜把它拉回來。amp 是飄移幅度（R），speed 是飄移的基本頻率（Hz），
+  // yScale 是前後方向的幅度比例，ramp 是開倒後幾秒內從 0 漸增到全幅。
+  balance: { amp: 0.55, speed: 0.3, yScale: 0.6, ramp: 2.5 },
   // 流體
   sim: { simRes: 128, dyeRes: 384, pressureIters: 20, curl: 1, velDissipation: 3.0 },
   // 牛奶注入（UV 單位）

@@ -28,6 +28,7 @@ let state = 'intro';
 let t = 0, lastTs = 0, sinceStart = 0;
 let score = null, prevRel = null, prevCup = null, tipFrames = 0;
 let steam = { held:false, progress:0 };
+let drift = [0,0,0,0,0,0];
 let fps = 0, fpsN = 0, fpsT = 0;
 
 function layout(){
@@ -90,6 +91,7 @@ function startPour(){
   if(!fluid && !initFluid()) return;
   fluid.reset(); t = 0; sinceStart = 0; prevRel = null; prevCup = null; tipFrames = 0;
   score = { inTime:0, pourTime:0, samples:[], spilled:false };
+  drift = drift.map(() => Math.random()*Math.PI*2);
   cup.scale = 1; steam.progress = 0; $('steam-done').hidden = true;
   setState('pour');
 }
@@ -99,8 +101,12 @@ function cupFromTilt(dt){
   const r = tilt.read();
   const k = cup.R / settings.maxDeg;
   let tx = home.x + r.x*k, ty = home.y + (settings.invertY ? -r.y : r.y)*k;
-  // 杯子干擾（液面飄移）：慢速漂移
-  if(LEVEL.cupDisturbance > 0){ const a = LEVEL.cupDisturbance*cup.R*0.25; tx += a*Math.sin(sinceStart*1.3)*Math.sin(sinceStart*0.7+1); ty += a*Math.sin(sinceStart*1.1+2); }
+  // 杯子難平衡：杯子自己慢慢飄走（三個不同頻率的正弦疊加，每次倒的相位都不同），玩家用傾斜抵銷
+  const B = TUNING.balance, ramp = Math.min(1, sinceStart / B.ramp), dist = 1 + LEVEL.cupDisturbance;
+  const w = 2*Math.PI*B.speed*dist, A = B.amp*cup.R*ramp*dist;
+  const nx = 0.5*Math.sin(w*sinceStart + drift[0]) + 0.3*Math.sin(w*1.9*sinceStart + drift[1]) + 0.2*Math.sin(w*3.1*sinceStart + drift[2]);
+  const ny = 0.5*Math.sin(w*0.8*sinceStart + drift[3]) + 0.3*Math.sin(w*2.1*sinceStart + drift[4]) + 0.2*Math.sin(w*2.7*sinceStart + drift[5]);
+  tx += A*nx; ty += A*B.yScale*ny;
   // 限制在畫面內
   const lim = cup.R*1.6; tx = Math.max(home.x-lim, Math.min(home.x+lim, tx)); ty = Math.max(home.y-lim, Math.min(home.y+lim, ty));
   if(prevCup){ const vx = (tx-prevCup.x)/dt, vy = (ty-prevCup.y)/dt; cup.ax = (vx-cup.vx)/dt; cup.ay = (vy-cup.vy)/dt; cup.vx=vx; cup.vy=vy; }
