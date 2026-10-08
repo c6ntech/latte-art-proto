@@ -11,13 +11,14 @@ export const LEVEL = {
 // 手感與判定的調整值。單位：R = 杯子半徑，UV = 杯面貼圖座標 (0..1)。
 export const TUNING = {
   // 傾斜 → 位置（角度對應位置）。maxDeg 度對應 1R 的位移。
-  tilt: { maxDeg: 16, tipDeg: 40, filterMinCutoff: 0.9, filterBeta: 0.03, smooth: 10 },
+  tilt: { maxDeg: 18, tipDeg: 42, filterMinCutoff: 0.9, filterBeta: 0.03, smooth: 8, deadZone: 1.0 },
   // 甜蜜點：杯面上的橢圓（杯子座標，y 往上為負），rx/ry 是半徑（R）
-  target: { x: 0, y: -0.08, rx: 0.38, ry: 0.56 },
+  target: { x: 0, y: -0.08, rx: 0.42, ry: 0.58 },
   passRatio: 0.8,
   // 杯子難平衡：杯子會自己慢慢飄走，玩家要用傾斜把它拉回來。amp 是飄移幅度（R），speed 是飄移的基本頻率（Hz），
   // yScale 是前後方向的幅度比例，ramp 是開倒後幾秒內從 0 漸增到全幅。
-  balance: { amp: 0.7, speed: 0.12, yScale: 0.5, ramp: 4 },
+  balance: { amp: 0.5, speed: 0.08, yScale: 0.5, ramp: 4 },
+  assist: 0.3, // 瞄準輔助：落點往甜蜜點中心拉近的比例（0 = 完全真實）
   // 流體
   sim: { simRes: 128, dyeRes: 384, pressureIters: 20, curl: 1, velDissipation: 3.0 },
   // 牛奶注入（UV 單位）

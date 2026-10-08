@@ -8,7 +8,21 @@ import tulip from './patterns/tulip.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const DEV = { mouse: params.get('mouse')==='1', auto: params.get('auto')==='1' };
+const DEV = { mouse: params.get('mouse')==='1', auto: params.get('auto')==='1', hand: params.get('hand')==='1', play: params.get('play')==='1' };
+// 模擬真人手持：微抖（3–6Hz，±1.2°）+ 慢慢偏（±3.5°，數十秒週期）；play=1 再加上一個有 0.3 秒反應延遲、每 0.25 秒修正一次的玩家
+const hand = { phase: [Math.random()*6, Math.random()*6, Math.random()*6], cmd: {x:0,y:0}, target: {x:0,y:0}, nextDecision: 0, errHist: [] };
+function handTilt(tNow, dt, err){
+  const jx = 1.2*(Math.sin(2*Math.PI*3.1*tNow) + 0.6*Math.sin(2*Math.PI*6.3*tNow+1)), jy = 1.2*(Math.sin(2*Math.PI*2.7*tNow+2) + 0.6*Math.sin(2*Math.PI*5.1*tNow));
+  const bx = 3.5*(Math.sin(2*Math.PI*0.05*tNow+hand.phase[0]) + 0.5*Math.sin(2*Math.PI*0.11*tNow+hand.phase[1])), by = 3.5*Math.sin(2*Math.PI*0.07*tNow+hand.phase[2]);
+  if(DEV.play && err){
+    hand.errHist.push({t:tNow, e:err}); while(hand.errHist.length && hand.errHist[0].t < tNow-0.3) hand.errHist.shift();
+    if(tNow >= hand.nextDecision){ hand.nextDecision = tNow + 0.25; const d = hand.errHist[0] ? hand.errHist[0].e : err;
+      hand.target.x = hand.cmd.x + d.x*settings.maxDeg*0.6; hand.target.y = hand.cmd.y + d.y*settings.maxDeg*0.6; }
+    const rate = 30*dt; hand.cmd.x += Math.max(-rate, Math.min(rate, hand.target.x-hand.cmd.x)); hand.cmd.y += Math.max(-rate, Math.min(rate, hand.target.y-hand.cmd.y));
+  }
+  return { x: jx + bx + hand.cmd.x, y: jy + by + hand.cmd.y };
+}
+let lastErr = null;
 
 // ---------- 設定（可開關） ----------
 const settings = { showTarget: true, invertY: false, debug: false, maxDeg: TUNING.tilt.maxDeg };
@@ -17,7 +31,7 @@ function saveSettings(){ try{ localStorage.setItem('latte.settings', JSON.string
 
 // ---------- 物件 ----------
 const pattern = tulip;
-const tilt = new Tilt({ minCutoff: TUNING.tilt.filterMinCutoff, beta: TUNING.tilt.filterBeta });
+const tilt = new Tilt({ minCutoff: TUNING.tilt.filterMinCutoff, beta: TUNING.tilt.filterBeta, deadZone: TUNING.tilt.deadZone });
 const scene = new Scene($('fg'));
 const sound = new SteamSound();
 let fluid = null;
@@ -64,6 +78,12 @@ $('btn-enable').addEventListener('click', () => {
   const p = tilt.requestPermission();
   p.then(() => { setState('calib'); }).catch(() => { $('perm-error').hidden = false; });
   try { if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{}); } catch(e){}
+  // Android：全螢幕 + 鎖直向，避免傾斜時自動轉成橫向。iOS Safari 不支援，請開旋轉鎖定。
+  try {
+    const el = document.documentElement;
+    const fs = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : Promise.reject();
+    fs.then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('portrait')).catch(()=>{});
+  } catch(e){}
 });
 $('btn-calib').addEventListener('click', () => { tilt.calibrate(); setState('steam'); });
 $('btn-recalib').addEventListener('click', () => { setState('calib'); });
@@ -130,7 +150,7 @@ function frame(ts){
   let dt = lastTs ? (ts-lastTs)/1000 : 1/60; lastTs = ts; dt = Math.min(dt, 1/30); if(dt<=0) dt = 1/60;
   fpsN++; if(ts - fpsT > 500){ fps = fpsN*1000/(ts-fpsT); fpsN=0; fpsT=ts; }
   const time = ts/1000;
-  let pitcher = null, outside = false;
+  let pitcher = null, outside = false, insideNow = false;
 
   if(state==='steam' && steam.held){ steam.progress = Math.min(1, steam.progress + dt/2.6); sound.update(steam.progress); }
   if(state==='steam'){ $('foam').style.height = (18 + 70*steam.progress)+'%'; }
@@ -148,18 +168,23 @@ function frame(ts){
     if(LEVEL.pitcherDisturbance > 0){ const a = LEVEL.pitcherDisturbance*0.18; nx = a*(Math.sin(t*9.1)*0.6 + Math.sin(t*2.3)); ny = a*(Math.sin(t*7.7+1)*0.6 + Math.sin(t*1.9+2)); }
     const px = home.x + (s.x+nx)*cup.R, py = home.y + (s.y+ny)*cup.R;
     let r;
+    if(DEV.hand){ tilt.mock = handTilt(sinceStart, dt, lastErr); }
     if(DEV.auto){ cup.x = home.x + s.x*cup.R; cup.y = home.y; r = {rawX:0,rawY:0}; if(prevCup){ cup.vx=(cup.x-prevCup.x)/dt; } prevCup={x:cup.x,y:cup.y}; }
     else r = cupFromTilt(dt);
     pitcher = { x:px, y:py, flow:s.flow*LEVEL.flowRate, h:s.h, prep:s.prep, prepDir:s.prepDir };
     if(!DEV.auto && checkTip(r)){ score.spilled = true; endPour(); }
     else {
-      const rel = { x:(px-cup.x)/cup.R, y:(py-cup.y)/cup.R };
       const T = TUNING.target;
+      const rel = { x:(px-cup.x)/cup.R, y:(py-cup.y)/cup.R };
+      // 瞄準輔助：落點往甜蜜點中心拉近一點（只影響落點，不影響杯子位置）
+      rel.x = T.x + (rel.x-T.x)*(1-TUNING.assist); rel.y = T.y + (rel.y-T.y)*(1-TUNING.assist);
+      pitcher.ix = cup.x + rel.x*cup.R; pitcher.iy = cup.y + rel.y*cup.R;
+      lastErr = { x: rel.x - T.x, y: rel.y - T.y };
       const q = ((rel.x-T.x)/T.rx)**2 + ((rel.y-T.y)/T.ry)**2;
       const inside = q <= 1;
       const fuzz = inside ? 0 : Math.min(1, (Math.sqrt(q)-1)/TUNING.pour.fuzzSoft); // 剛出界只糊一點，越遠越糊
       const pouring = pitcher.flow > 0.05;
-      outside = pouring && !inside;
+      outside = pouring && !inside; insideNow = pouring && inside;
       if(pouring){ score.pourTime += dt; if(inside) score.inTime += dt; score.samples.push({t, inside}); }
       // 注入
       const P = TUNING.pour;
@@ -201,7 +226,7 @@ function frame(ts){
 
   // 繪製
   glCanvas.style.transform = `translate(${cup.x-cup.R}px, ${cup.y-cup.R}px) scale(${cup.scale})`;
-  if(fluid) fluid.render(settings.showTarget && state==='pour' ? 1 : 0, targetEll());
+  if(fluid) fluid.render(settings.showTarget && state==='pour' ? (insideNow ? 1.6 : 0.9) : 0, targetEll());
   scene.clear();
   scene.draw(cup, pitcher, { showPitcher: !!pitcher, time, outside });
 
@@ -240,6 +265,6 @@ function drawTimeline(samples, spilled){
 const bootT = performance.now();
 layout();
 if(!initFluid()){ /* 錯誤已顯示 */ }
-if(DEV.auto){ tilt.mock = {x:0,y:0}; }
+if(DEV.auto || DEV.hand){ tilt.mock = {x:0,y:0}; }
 setState('intro');
 requestAnimationFrame(frame);

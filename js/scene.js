@@ -28,7 +28,7 @@ export class Scene {
     c.beginPath(); c.arc(cup.x, cup.y, R*0.985, 0, Math.PI*2); c.strokeStyle='rgba(60,30,10,0.35)'; c.lineWidth=2; c.stroke();
 
     if(pitcher && s.showPitcher){
-      const P = pitcher; const Rr = cup.R;
+      const P = Object.assign({}, pitcher, pitcher.ix !== undefined ? { x: pitcher.ix, y: pitcher.iy } : {}); const Rr = cup.R;
       // 奶流落點 P.x,P.y；鋼杯嘴在落點右上方，越高（h）越遠
       const off = { x: Rr*(0.22 + 0.1*P.h), y: -Rr*(0.62 + 0.45*P.h) };
       const back = P.prep ? Math.sin(P.prep*Math.PI) : 0;

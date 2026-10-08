@@ -14,7 +14,7 @@ class OneEuro {
 
 export class Tilt {
   constructor(opts){
-    this.minCutoff = opts.minCutoff; this.beta = opts.beta;
+    this.minCutoff = opts.minCutoff; this.beta = opts.beta; this.deadZone = opts.deadZone || 0;
     this.raw = { beta:0, gamma:0 }; this.zero = { beta:0, gamma:0 };
     this.fx = new OneEuro(this.minCutoff, this.beta); this.fy = new OneEuro(this.minCutoff, this.beta);
     this.hasData = false; this.events = 0; this.lastEventT = 0; this.hz = 0; this._hzT = performance.now(); this._hzN = 0;
@@ -36,16 +36,29 @@ export class Tilt {
     this._hzN++; if(now - this._hzT > 1000){ this.hz = this._hzN*1000/(now-this._hzT); this._hzN=0; this._hzT=now; }
     this.lastEventT = now;
   }
-  calibrate(){ this.zero.beta = this.raw.beta; this.zero.gamma = this.raw.gamma; this.fx.reset(); this.fy.reset(); }
+  orientation(){ try { if(screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle; } catch(e){} return (typeof window.orientation === 'number') ? window.orientation : 0; }
+  calibrate(){
+    const o = this.orientation(); let b = this.raw.beta, g = this.raw.gamma;
+    if(o === 90){ const t = b; b = g; g = -t; } else if(o === -90 || o === 270){ const t = b; b = -g; g = t; } else if(o === 180){ b = -b; g = -g; }
+    this.zero.beta = b; this.zero.gamma = g; this.fx.reset(); this.fy.reset();
+  }
   // 回傳相對歸零點的傾斜角（度）：x = 左右（右低為正），y = 前後（上緣往下為負）
   read(){
     const now = performance.now()/1000;
     let gx, gy;
     if(this.mock){ gx = this.mock.x; gy = this.mock.y; }
     else {
-      gx = this.raw.gamma - this.zero.gamma; gy = this.raw.beta - this.zero.beta;
+      // 依螢幕旋轉角把 beta/gamma 轉回「直立」的軸向（手機若被轉成橫向，遊戲軸不會跟著亂掉）
+      const o = this.orientation();
+      let b = this.raw.beta, g = this.raw.gamma;
+      if(o === 90){ const t = b; b = g; g = -t; } else if(o === -90 || o === 270){ const t = b; b = -g; g = t; } else if(o === 180){ b = -b; g = -g; }
+      gx = g - this.zero.gamma; gy = b - this.zero.beta;
       if(gx > 180) gx -= 360; if(gx < -180) gx += 360;
       if(gy > 180) gy -= 360; if(gy < -180) gy += 360;
+      // 死區：手的微抖不算
+      const dz = this.deadZone || 0;
+      gx = Math.abs(gx) < dz ? 0 : gx - Math.sign(gx)*dz;
+      gy = Math.abs(gy) < dz ? 0 : gy - Math.sign(gy)*dz;
     }
     return { x: this.fx.filter(gx, now), y: this.fy.filter(gy, now), rawX: gx, rawY: gy };
   }

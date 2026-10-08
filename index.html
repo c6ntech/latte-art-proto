@@ -57,7 +57,7 @@ button:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
   <div class="card">
     <h1>拉花原型</h1>
     <p>手機就是杯子。杯子會自己飄，用傾斜手機把它拉回來，讓奶流一直落在杯面上方的甜蜜點。</p>
-    <p class="hint">請直立拿手機、放平。iPhone 會跳出動作感測器授權，請按允許。</p>
+    <p class="hint">請直立拿手機，像端著一杯咖啡。iPhone 會跳出動作感測器授權，請按允許；建議先打開「旋轉鎖定」。</p>
     <p id="gl-error" class="err" hidden></p>
     <p id="perm-error" class="err" hidden>沒有拿到感測器權限。請到 設定 › Safari › 動作與方向取用 打開後重新整理。</p>
     <button id="btn-enable">啟用陀螺儀</button>
@@ -109,7 +109,7 @@ button:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
   <div class="card">
     <h2>設定</h2>
     <label><span>顯示甜蜜點目標區</span><input id="set-target" type="checkbox"></label>
-    <label><span>傾斜靈敏度（幾度 = 一個杯子半徑）</span><select id="set-deg"><option value="8">8°（靈敏）</option><option value="12">12°</option><option value="16">16°（遲鈍）</option></select></label>
+    <label><span>傾斜靈敏度（幾度 = 一個杯子半徑）</span><select id="set-deg"><option value="8">8°（靈敏）</option><option value="12">12°</option><option value="16">16°</option><option value="18">18°（預設）</option><option value="24">24°（遲鈍）</option></select></label>
     <label><span>前後方向反轉</span><input id="set-invert" type="checkbox"></label>
     <label><span>顯示除錯數據</span><input id="set-debug" type="checkbox"></label>
     <button id="btn-close-settings" class="ghost">關閉</button>
