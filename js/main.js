@@ -109,6 +109,8 @@ function cupFromTilt(dt){
   tx += A*nx; ty += A*B.yScale*ny;
   // 限制在畫面內
   const lim = cup.R*1.6; tx = Math.max(home.x-lim, Math.min(home.x+lim, tx)); ty = Math.max(home.y-lim, Math.min(home.y+lim, ty));
+  const sm = 1 - Math.exp(-TUNING.tilt.smooth*dt);
+  tx = prevCup ? prevCup.x + (tx-prevCup.x)*sm : tx; ty = prevCup ? prevCup.y + (ty-prevCup.y)*sm : ty;
   if(prevCup){ const vx = (tx-prevCup.x)/dt, vy = (ty-prevCup.y)/dt; cup.ax = (vx-cup.vx)/dt; cup.ay = (vy-cup.vy)/dt; cup.vx=vx; cup.vy=vy; }
   prevCup = { x:tx, y:ty };
   cup.x = tx; cup.y = ty;
@@ -155,6 +157,7 @@ function frame(ts){
       const T = TUNING.target;
       const q = ((rel.x-T.x)/T.rx)**2 + ((rel.y-T.y)/T.ry)**2;
       const inside = q <= 1;
+      const fuzz = inside ? 0 : Math.min(1, (Math.sqrt(q)-1)/TUNING.pour.fuzzSoft); // 剛出界只糊一點，越遠越糊
       const pouring = pitcher.flow > 0.05;
       outside = pouring && !inside;
       if(pouring){ score.pourTime += dt; if(inside) score.inTime += dt; score.samples.push({t, inside}); }
@@ -171,14 +174,14 @@ function frame(ts){
         let jet = P.jetStrength * f * (0.55 + 0.75*h) * LEVEL.gravity;
         let push = P.pushStrength * f * (1 - 0.6*h) * LEVEL.gravity * LEVEL.flowRate;
         let vx = rvx*P.momentum, vy = jet + rvy*P.momentum;
-        if(!inside){ // 落在甜蜜點外：亂流、奶泡沉下去、圖案糊掉
-          const a = Math.random()*Math.PI*2; vx += Math.cos(a)*P.fuzzJet; vy += Math.sin(a)*P.fuzzJet;
-          dyeR *= P.fuzzDyeScale; amount *= P.fuzzAmount; push *= P.fuzzPush;
+        if(fuzz > 0){ // 落在甜蜜點外：亂流、奶泡沉下去、圖案糊掉（依出界距離漸進）
+          const a = Math.random()*Math.PI*2; vx += Math.cos(a)*P.fuzzJet*fuzz; vy += Math.sin(a)*P.fuzzJet*fuzz;
+          dyeR *= 1 + (P.fuzzDyeScale-1)*fuzz; amount *= 1 - (1-P.fuzzAmount)*fuzz; push *= 1 - (1-P.fuzzPush)*fuzz;
         }
         const clampV = Math.min(1.2, Math.hypot(vx,vy)); const L = Math.hypot(vx,vy)||1; vx = vx/L*clampV; vy = vy/L*clampV;
         fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount);
-        fluid.setPush(u, v, P.pushSigma, push);
-      } else fluid.setPush(u, v, P.pushSigma, 0);
+        fluid.setPush(u, v, P.pushSigma, push, P.pushR0);
+      } else fluid.setPush(u, v, P.pushSigma, 0, P.pushR0);
       // 杯子加速度 → 液面晃動
       const sl = P.slosh*(1 + 2*LEVEL.cupDisturbance);
       const fx = -cup.ax/cup.R*0.5*sl, fy = cup.ay/cup.R*0.5*sl;

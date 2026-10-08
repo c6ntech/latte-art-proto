@@ -11,24 +11,24 @@ export const LEVEL = {
 // 手感與判定的調整值。單位：R = 杯子半徑，UV = 杯面貼圖座標 (0..1)。
 export const TUNING = {
   // 傾斜 → 位置（角度對應位置）。maxDeg 度對應 1R 的位移。
-  tilt: { maxDeg: 12, tipDeg: 38, filterMinCutoff: 1.2, filterBeta: 0.04 },
+  tilt: { maxDeg: 16, tipDeg: 40, filterMinCutoff: 0.9, filterBeta: 0.03, smooth: 10 },
   // 甜蜜點：杯面上的橢圓（杯子座標，y 往上為負），rx/ry 是半徑（R）
-  target: { x: 0, y: -0.22, rx: 0.3, ry: 0.48 },
+  target: { x: 0, y: -0.08, rx: 0.38, ry: 0.56 },
   passRatio: 0.8,
   // 杯子難平衡：杯子會自己慢慢飄走，玩家要用傾斜把它拉回來。amp 是飄移幅度（R），speed 是飄移的基本頻率（Hz），
   // yScale 是前後方向的幅度比例，ramp 是開倒後幾秒內從 0 漸增到全幅。
-  balance: { amp: 0.55, speed: 0.3, yScale: 0.6, ramp: 2.5 },
+  balance: { amp: 0.7, speed: 0.12, yScale: 0.5, ramp: 4 },
   // 流體
   sim: { simRes: 128, dyeRes: 384, pressureIters: 20, curl: 1, velDissipation: 3.0 },
   // 牛奶注入（UV 單位）
   pour: {
-    dyeSigma: 0.03, dyeSigmaLow: 0.024,   // 奶流半徑：低拿（h=0）粗、高拿（h=1）細
-    amountPerFrame: 0.14,                   // 每幀注入的奶泡量（60fps）
-    pushSigma: 0.14, pushStrength: 0.16,     // 擴散推開（compressible push）
-    jetStrength: 0.09, jetSigma: 0.045,     // 向前噴流（讓奶泡往前推、堆疊）
-    momentum: 0.8,                           // 鋼杯相對杯子的速度帶入流場的比例
-    slosh: 0.12,                             // 杯子加速度對液面的影響
-    fuzzJet: 0.55, fuzzDyeScale: 1.7, fuzzAmount: 0.6, fuzzPush: 0.5 // 落在甜蜜點外時的糊掉
+    dyeSigma: 0.028, dyeSigmaLow: 0.03,   // 奶流半徑：低拿（h=0）粗、高拿（h=1）細
+    amountPerFrame: 0.12,                   // 每幀注入的奶泡量（60fps）
+    pushSigma: 0.45, pushStrength: 0.11, pushR0: 0.035,     // 擴散推開（compressible push）
+    jetStrength: 0.03, jetSigma: 0.045,     // 向前噴流（讓奶泡往前推、堆疊）
+    momentum: 0.15,                           // 鋼杯相對杯子的速度帶入流場的比例
+    slosh: 0.04,                             // 杯子加速度對液面的影響
+    fuzzJet: 0.3, fuzzDyeScale: 1.6, fuzzAmount: 0.6, fuzzPush: 0.5, fuzzSoft: 0.25 // 落在甜蜜點外時的糊掉
   },
   // 畫面
   view: { cupRadiusFrac: 0.29, cupCenterY: 0.56 },

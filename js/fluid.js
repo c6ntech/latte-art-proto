@@ -51,11 +51,12 @@ void main(){ float L=texture(uPressure,vL).x, R=texture(uPressure,vR).x, T=textu
   // Semi-Lagrangian advection. uPush adds a compressible radial displacement (used for dye only)
   // so milk visibly spreads outward from the impact point and shoves older foam aside.
   advect: HEAD + `uniform sampler2D uVel, uSource; uniform float uDt, uDissipation, uMask;
-uniform vec2 uPush; uniform float uPushR, uPushStr;
+uniform vec2 uPush; uniform float uPushR, uPushStr, uPushR0;
 void main(){
   vec2 vel = texture(uVel,vUv).xy;
-  vec2 d = vUv - uPush; float r2 = dot(d,d);
-  vec2 push = d/(sqrt(r2)+1e-4) * uPushStr * exp(-r2/uPushR);
+  vec2 d = vUv - uPush; float r2 = dot(d,d); float r = sqrt(r2);
+  // 像 2D 面積守恆的擴散：速度 ∝ 1/r（近處封頂），遠處再用高斯衰減。舊奶泡被往外推但層與層的間隔不會被追上。
+  vec2 push = d/(r+1e-4) * uPushStr * (uPushR0/max(r,uPushR0)) * exp(-r2/uPushR);
   vec2 coord = vUv - uDt*(vel+push);
   vec4 res = texture(uSource, coord) / (1.0 + uDissipation*uDt);
   frag = mix(res, res*cupMask(vUv), uMask); }`,
@@ -165,7 +166,7 @@ export class Fluid {
     this.vao = vao;
     this.initFBOs();
     this.pendingSplats = [];
-    this.push = { x:0.5, y:0.5, r:0.04, str:0 };
+    this.push = { x:0.5, y:0.5, r:0.04, str:0, r0:0.03 };
     this.force = [0,0];
   }
   initFBOs(){
@@ -191,7 +192,7 @@ export class Fluid {
   }
   // x,y in UV (0..1). vx,vy velocity in UV/s. dyeR / velR are gaussian sigma in UV. amount: dye per call.
   splat(x, y, vx, vy, velR, dyeR, amount){ this.pendingSplats.push({x,y,vx,vy,velR,dyeR,amount}); }
-  setPush(x, y, sigma, strength){ this.push.x=x; this.push.y=y; this.push.r=sigma*sigma; this.push.str=strength; }
+  setPush(x, y, sigma, strength, r0){ this.push.x=x; this.push.y=y; this.push.r=sigma*sigma; this.push.str=strength; this.push.r0=r0||0.03; }
   setForce(fx, fy){ this.force=[fx,fy]; }
 
   step(dt){
@@ -238,14 +239,14 @@ export class Fluid {
     gl.uniform1i(p.gradient.u.uPressure, this.pressure.read.attach(0)); gl.uniform1i(p.gradient.u.uVel, V.read.attach(1)); this.blit(V.write); V.swap();
     // advect velocity
     p.advect.use(); gl.uniform2fv(p.advect.u.uTexel, V.texel); gl.uniform2fv(p.advect.u.uCupShape, shape);
-    gl.uniform1f(p.advect.u.uDt, dt); gl.uniform1f(p.advect.u.uPushStr, 0); gl.uniform2f(p.advect.u.uPush, 0.5,0.5); gl.uniform1f(p.advect.u.uPushR, 1);
+    gl.uniform1f(p.advect.u.uDt, dt); gl.uniform1f(p.advect.u.uPushStr, 0); gl.uniform2f(p.advect.u.uPush, 0.5,0.5); gl.uniform1f(p.advect.u.uPushR, 1); gl.uniform1f(p.advect.u.uPushR0, 0.03);
     gl.uniform1i(p.advect.u.uVel, V.read.attach(0)); gl.uniform1i(p.advect.u.uSource, V.read.attach(0));
     gl.uniform1f(p.advect.u.uDissipation, o.velDissipation); gl.uniform1f(p.advect.u.uMask, 1); this.blit(V.write); V.swap();
     // advect dye (with compressible radial push from the milk stream)
     gl.uniform2fv(p.advect.u.uTexel, this.dye.texel);
     gl.uniform1i(p.advect.u.uVel, V.read.attach(0)); gl.uniform1i(p.advect.u.uSource, this.dye.read.attach(1));
     gl.uniform1f(p.advect.u.uDissipation, o.dyeDissipation); gl.uniform1f(p.advect.u.uMask, 0);
-    gl.uniform2f(p.advect.u.uPush, this.push.x, this.push.y); gl.uniform1f(p.advect.u.uPushR, this.push.r); gl.uniform1f(p.advect.u.uPushStr, this.push.str);
+    gl.uniform2f(p.advect.u.uPush, this.push.x, this.push.y); gl.uniform1f(p.advect.u.uPushR, this.push.r); gl.uniform1f(p.advect.u.uPushStr, this.push.str); gl.uniform1f(p.advect.u.uPushR0, this.push.r0);
     this.blit(this.dye.write); this.dye.swap();
   }
   render(showTarget, ell){
