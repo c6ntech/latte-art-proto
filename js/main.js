@@ -26,8 +26,8 @@ let lastErr = null;
 
 // ---------- 設定（可開關） ----------
 const settings = { showTarget: true, invertY: false, debug: false, maxDeg: TUNING.tilt.maxDeg };
-try { Object.assign(settings, JSON.parse(localStorage.getItem('latte.settings')||'{}')); } catch(e){}
-function saveSettings(){ try{ localStorage.setItem('latte.settings', JSON.stringify(settings)); }catch(e){} }
+try { Object.assign(settings, JSON.parse(localStorage.getItem('latte.settings.v2')||'{}')); } catch(e){}
+function saveSettings(){ try{ localStorage.setItem('latte.settings.v2', JSON.stringify(settings)); }catch(e){} }
 
 // ---------- 物件 ----------
 const pattern = tulip;
