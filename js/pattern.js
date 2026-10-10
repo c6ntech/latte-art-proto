@@ -12,13 +12,13 @@ export function samplePattern(pattern, t){
   const a = kf[i-1], b = kf[i];
   const u = (t - a.t) / Math.max(1e-6, b.t - a.t);
   const e = (easeFn[b.ease] || smooth)(u);
-  const out = { t, x: a.x + (b.x-a.x)*e, y: a.y + (b.y-a.y)*e, flow: a.flow + (b.flow-a.flow)*e, h: a.h + (b.h-a.h)*e };
-  // 預備動作：找下一個「位移段」（flow 為 0 且 x 或 y 有明顯移動）
+  const out = { t, x: a.x + (b.x-a.x)*e, y: a.y + (b.y-a.y)*e, flow: a.flow + (b.flow-a.flow)*e, h: a.h + (b.h-a.h)*e, L: b.L };
+  // 預備動作：找下一個明顯的位移段（倒的過程不中斷，所以不再要求 flow 為 0；只挑夠大的移動，例如拉莖）
   let prep = 0, prepDir = [0,0];
   for(let j = i; j < kf.length; j++){
     const p = kf[j-1], q = kf[j];
     const dx = q.x - p.x, dy = q.y - p.y;
-    if(Math.hypot(dx,dy) > 0.12 && p.flow < 0.05){
+    if(Math.hypot(dx,dy) > TUNING.prepMinMove && q.t - p.t > TUNING.prepMinDur){   // quick wrist wiggles get no prep
       const until = p.t - t;
       if(until >= 0 && until <= TUNING.prepLead){ prep = 1 - until / TUNING.prepLead; const L = Math.hypot(dx,dy); prepDir = [dx/L, dy/L]; }
       break;

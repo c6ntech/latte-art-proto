@@ -13,7 +13,7 @@ export const TUNING = {
   // 傾斜 → 位置（角度對應位置）。maxDeg 度對應 1R 的位移。
   tilt: { maxDeg: 18, tipDeg: 42, filterMinCutoff: 0.9, filterBeta: 0.03, smooth: 8, deadZone: 1.0 },
   // 甜蜜點：杯面上的橢圓（杯子座標，y 往上為負），rx/ry 是半徑（R）
-  target: { x: 0, y: -0.08, rx: 0.42, ry: 0.58 },
+  target: { x: 0, y: -0.04, rx: 0.42, ry: 0.58 },   // 葉子（rosetta）的落點範圍置中
   passRatio: 0.8,
   // 杯子難平衡：杯子會自己慢慢飄走，玩家要用傾斜把它拉回來。amp 是飄移幅度（R），speed 是飄移的基本頻率（Hz），
   // yScale 是前後方向的幅度比例，ramp 是開倒後幾秒內從 0 漸增到全幅。
@@ -25,13 +25,18 @@ export const TUNING = {
   // 牛奶注入（UV 單位）
   pour: {
     dyeSigma: 0.028, dyeSigmaLow: 0.03,   // 奶流半徑：低拿（h=0）粗、高拿（h=1）細
-    amountPerFrame: 0.12,                   // 每幀注入的奶泡量（60fps）
-    pushSigma: 0.45, pushStrength: 0.11, pushR0: 0.035,     // 擴散推開（compressible push）
-    jetStrength: 0.03, jetSigma: 0.045,     // 向前噴流（讓奶泡往前推、堆疊）
+    amountPerFrame: 0.2,                   // 每幀注入的奶泡量（60fps）
+    pushSigma: 0.45, pushStrength: 0.08, pushR0: 0.035,     // 擴散推開（compressible push）
+    jetStrength: 0.08, jetDir: -1,  // 奶離開壺嘴後繼續往前流（-1 = 往玩家方向，鋼杯在遠側）；葉子靠它把每次搖晃帶開、疊成一片片
+    jetSigma: 0.045,     // 向前噴流（讓奶泡往前推、堆疊）
     momentum: 0.15,                           // 鋼杯相對杯子的速度帶入流場的比例
     slosh: 0.04,                             // 杯子加速度對液面的影響
     fuzzJet: 0.3, fuzzDyeScale: 1.6, fuzzAmount: 0.6, fuzzPush: 0.5, fuzzSoft: 0.25, // 落在甜蜜點外時的糊掉
-    layerIds: [0.15, 0.55, 0.95, 0.35, 0.75]   // 每一次開始注入換一個層 id，相鄰兩層差 ≥ 0.4，分層線才畫得出來
+    layerIds: [0.15, 0.55, 0.95, 0.35, 0.75, 0.15],  // 每一層換一個 id，相鄰兩層差 ≥ 0.4，分層線才畫得出來
+    // 高拿會沉（D010）：鋼杯高度 h 在 sinkH[0] 以下奶會浮在表面，sinkH[1] 以上全部沉下去，只留一點 crema 色
+    conveyor: 0.3, conveyorW: 0.06, conveyorL: 0.3,   // 輸送帶（UV/s、半寬、長度）：壺嘴前方的奶泡被往前帶，葉子靠它疊起來
+    sinkH: [0.35, 0.65], sinkTint: 0.06, pushMinSurf: 0.0,   // 高拿時幾乎不推開表面（拉莖只拖出一條線）
+    layerOn: 0.6, layerOff: 0.3          // 表面奶量（流量 × 浮起比例）超過 on 開始新的一層，低於 off 結束
   },
   // 畫面
   view: { cupRadiusFrac: 0.29, cupCenterY: 0.56 },
@@ -51,5 +56,7 @@ export const TUNING = {
     grain: 1.6,                      // 所有程式貼圖的雜訊強度倍率（Reviewer r2：手機尺寸下顆粒太淡）
     sun: 2.1, ambient: 0.9, exposure: 1.0, background: 0x2a1d14
   },
-  prepLead: 0.35 // 預備動作提前秒數
+  prepLead: 0.35, // 預備動作提前秒數
+  prepMinMove: 0.25, // 位移超過這個距離（R）才做預備動作
+  prepMinDur: 0.4    // 而且這段移動要超過這麼久（秒），快速的手腕搖晃不做
 };

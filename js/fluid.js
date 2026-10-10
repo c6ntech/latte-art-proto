@@ -52,11 +52,16 @@ void main(){ float L=texture(uPressure,vL).x, R=texture(uPressure,vR).x, T=textu
   // so milk visibly spreads outward from the impact point and shoves older foam aside.
   advect: HEAD + `uniform sampler2D uVel, uSource; uniform float uDt, uDissipation, uMask;
 uniform vec2 uPush; uniform float uPushR, uPushStr, uPushR0;
+uniform vec2 uFwd; uniform float uConv, uConvW, uConvL;
 void main(){
   vec2 vel = texture(uVel,vUv).xy;
   vec2 d = vUv - uPush; float r2 = dot(d,d); float r = sqrt(r2);
   // 像 2D 面積守恆的擴散：速度 ∝ 1/r（近處封頂），遠處再用高斯衰減。舊奶泡被往外推但層與層的間隔不會被追上。
   vec2 push = d/(r+1e-4) * uPushStr * (uPushR0/max(r,uPushR0)) * exp(-r2/uPushR);
+  // 輸送帶：壺嘴前方一條窄帶裡的表面奶泡被往前帶（不經過壓力投影，所以不會捲成兩個渦）。
+  // 搖晃時每一段奶被帶開、疊在前一段後面，形成葉子（rosetta）。
+  float along = dot(d, uFwd), across = dot(d, vec2(-uFwd.y, uFwd.x));
+  push += uFwd * uConv * exp(-across*across/(uConvW*uConvW)) * smoothstep(-0.02, 0.02, along) * exp(-along*along/(uConvL*uConvL));
   vec2 coord = vUv - uDt*(vel+push);
   vec4 res = texture(uSource, coord) / (1.0 + uDissipation*uDt);
   frag = mix(res, res*cupMask(vUv), uMask); }`,
@@ -66,7 +71,10 @@ void main(){
 void main(){ vec2 p=vUv-uPoint; float s=exp(-dot(p,p)/uRadius); vec3 base=texture(uTarget,vUv).xyz;
   if(uMode>0.5){
     float add = s*uColor.x, r0 = base.x;
-    float g = (base.y*r0 + uLayer*add) / max(r0 + add, 1e-4);
+    // fresh milk wells up from below and owns the surface where it lands (sharp layer boundaries);
+    // only the faint tail of the splat blends, by mass
+    float own = smoothstep(0.15, 0.5, s);
+    float g = mix((base.y*r0 + uLayer*add) / max(r0 + add, 1e-4), uLayer, own);
     frag = vec4(min(r0 + add, 1.0), g, 0.0, 1.0); return;
   }
   vec3 v = (base + s*uColor) * cupMask(vUv);
@@ -99,8 +107,18 @@ void main(){
     vec3 cp = mix(coffee, uMilk, mp);
     if(mp > 0.2 && mp < 0.8) cp = mix(cp, uEdge, 0.35);
     if(dmax > 0.3 && dmin < 0.2) cp = mix(cp, uEdge*0.8, 0.45);
-    // two pours meet inside this texel: draw the thin coffee line that separates tulip layers
-    if(mp > 0.4 && gmax - gmin > uLayerLine) cp = mix(cp, uEdge*0.7, 0.8);
+    // Layer line, one pixel wide: this texel is milk and a neighbouring milk texel belongs to a lower layer id.
+    // One-sided (only the higher side draws), so a boundary never becomes a 2-pixel brown band.
+    if(mp > 0.4){
+      vec2 c0 = texture(uDye, vUv).xy; float o = 1.0/uOut; float hit = 0.0;
+      vec2 n1 = texture(uDye, vUv + vec2(o, 0.0)).xy, n2 = texture(uDye, vUv - vec2(o, 0.0)).xy;
+      vec2 n3 = texture(uDye, vUv + vec2(0.0, o)).xy, n4 = texture(uDye, vUv - vec2(0.0, o)).xy;
+      if(n1.x > 0.3 && c0.y - n1.y > uLayerLine) hit = 1.0;
+      if(n2.x > 0.3 && c0.y - n2.y > uLayerLine) hit = 1.0;
+      if(n3.x > 0.3 && c0.y - n3.y > uLayerLine) hit = 1.0;
+      if(n4.x > 0.3 && c0.y - n4.y > uLayerLine) hit = 1.0;
+      cp = mix(cp, uEdge*0.7, 0.8*hit);
+    }
     cp *= 1.0 + (hash(cell) - 0.5)*0.09;
     if(uTarget>0.0){ // faint dashed guide ring (UI, not latte art); brighter while the stream is inside
       vec2 q=(vUv-uTargetEll.xy)/uTargetEll.zw; float rr=length(q);
@@ -237,6 +255,8 @@ export class Fluid {
   // layer: id of the current pour (0..1); each new pour gets a distinct value so its boundary with older milk shows
   splat(x, y, vx, vy, velR, dyeR, amount, layer=0.5){ this.pendingSplats.push({x,y,vx,vy,velR,dyeR,amount,layer}); }
   setPush(x, y, sigma, strength, r0){ this.push.x=x; this.push.y=y; this.push.r=sigma*sigma; this.push.str=strength; this.push.r0=r0||0.03; }
+  // conveyor ahead of the pour point: fwd = unit direction in UV, strength in UV/s, w = half width, l = reach
+  setConveyor(fx, fy, strength, w, l){ this.conv = { fx, fy, s: strength, w, l }; }
   setForce(fx, fy){ this.force=[fx,fy]; }
 
   step(dt){
@@ -285,6 +305,7 @@ export class Fluid {
     // advect velocity
     p.advect.use(); gl.uniform2fv(p.advect.u.uTexel, V.texel); gl.uniform2fv(p.advect.u.uCupShape, shape);
     gl.uniform1f(p.advect.u.uDt, dt); gl.uniform1f(p.advect.u.uPushStr, 0); gl.uniform2f(p.advect.u.uPush, 0.5,0.5); gl.uniform1f(p.advect.u.uPushR, 1); gl.uniform1f(p.advect.u.uPushR0, 0.03);
+    gl.uniform1f(p.advect.u.uConv, 0); gl.uniform2f(p.advect.u.uFwd, 0, -1); gl.uniform1f(p.advect.u.uConvW, 0.1); gl.uniform1f(p.advect.u.uConvL, 0.3);   // velocity: no conveyor
     gl.uniform1i(p.advect.u.uVel, V.read.attach(0)); gl.uniform1i(p.advect.u.uSource, V.read.attach(0));
     gl.uniform1f(p.advect.u.uDissipation, o.velDissipation); gl.uniform1f(p.advect.u.uMask, 1); this.blit(V.write); V.swap();
     // advect dye (with compressible radial push from the milk stream)
@@ -292,6 +313,8 @@ export class Fluid {
     gl.uniform1i(p.advect.u.uVel, V.read.attach(0)); gl.uniform1i(p.advect.u.uSource, this.dye.read.attach(1));
     gl.uniform1f(p.advect.u.uDissipation, o.dyeDissipation); gl.uniform1f(p.advect.u.uMask, 0);
     gl.uniform2f(p.advect.u.uPush, this.push.x, this.push.y); gl.uniform1f(p.advect.u.uPushR, this.push.r); gl.uniform1f(p.advect.u.uPushStr, this.push.str); gl.uniform1f(p.advect.u.uPushR0, this.push.r0);
+    const cv = this.conv || { fx:0, fy:-1, s:0, w:0.1, l:0.3 };
+    gl.uniform2f(p.advect.u.uFwd, cv.fx, cv.fy); gl.uniform1f(p.advect.u.uConv, cv.s); gl.uniform1f(p.advect.u.uConvW, cv.w); gl.uniform1f(p.advect.u.uConvL, cv.l);
     this.blit(this.dye.write); this.dye.swap();
   }
   render(showTarget, ell){

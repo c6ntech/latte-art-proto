@@ -5,11 +5,18 @@ import { Scene } from './scene.js';
 import { SteamSound } from './audio.js';
 import { samplePattern } from './pattern.js';
 import tulip from './patterns/tulip.js';
+import rosetta from './patterns/rosetta.js';
 import { Scene3D } from './scene3d.js';
 import { VERSION } from './version.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
+// ?tune=pour.jetStrength:0.2,balance.amp:0.4 overrides TUNING numbers for quick side-by-side tests (dev only)
+for(const kv of (params.get('tune') || '').split(',').filter(Boolean)){
+  const [path, val] = kv.split(':'); const keys = path.split('.'); let o = TUNING;
+  for(const k of keys.slice(0, -1)) o = o && o[k];
+  if(o && typeof o[keys[keys.length-1]] === 'number' && isFinite(+val)) o[keys[keys.length-1]] = +val;
+}
 const DEV = { mouse: params.get('mouse')==='1', auto: params.get('auto')==='1', hand: params.get('hand')==='1', play: params.get('play')==='1' };
 // 模擬真人手持：微抖（3–6Hz，±1.2°）+ 慢慢偏（±3.5°，數十秒週期）；play=1 再加上一個有 0.3 秒反應延遲、每 0.25 秒修正一次的玩家
 const hand = { phase: [Math.random()*6, Math.random()*6, Math.random()*6], cmd: {x:0,y:0}, target: {x:0,y:0}, nextDecision: 0, errHist: [] };
@@ -34,7 +41,8 @@ if(params.get('view') === '2d' || params.get('view') === '3d') settings.view = p
 let VIEW3D = settings.view !== '2d';
 
 // ---------- 物件 ----------
-const pattern = tulip;
+const PATTERNS = { rosetta, tulip };   // a pattern is a data file; ?pattern=tulip to try another
+const pattern = PATTERNS[params.get('pattern')] || rosetta;
 const tilt = new Tilt({ minCutoff: TUNING.tilt.filterMinCutoff, beta: TUNING.tilt.filterBeta, deadZone: TUNING.tilt.deadZone });
 const scene = new Scene($('fg'));
 const sound = new SteamSound();
@@ -47,7 +55,8 @@ let t = 0, lastTs = 0, sinceStart = 0;
 let score = null, prevRel = null, prevCup = null, tipFrames = 0;
 let steam = { held:false, progress:0 };
 let drift = [0,0,0,0,0,0];
-let layerIdx = -1, wasPouring = false;   // each new pour burst is its own foam layer
+let layerIdx = -1, depositing = false;   // each low "push" of the continuous pour is its own foam layer (D010)
+const smoothstep = (a, b, x) => { const u = Math.max(0, Math.min(1, (x-a)/(b-a))); return u*u*(3-2*u); };
 let fps = 0, fpsN = 0, fpsT = 0;
 
 function layout(){
@@ -118,6 +127,7 @@ for(const id of ['set-target','set-invert','set-debug']){
 $('set-deg').value = String(settings.maxDeg); $('set-deg').addEventListener('change', e => { settings.maxDeg = +e.target.value; saveSettings(); });
 $('set-view').value = VIEW3D ? '3d' : '2d'; $('set-view').addEventListener('change', e => { settings.view = e.target.value; saveSettings(); location.reload(); });
 $('build').textContent = `v${VERSION} · ${VIEW3D ? '3D' : '2D'}`;
+$('ready-title').textContent = pattern.name;
 $('debug').hidden = !settings.debug;
 for(const b of document.querySelectorAll('.btn-settings')) b.addEventListener('click', () => { $('settings').hidden = !$('settings').hidden; });
 $('btn-close-settings').addEventListener('click', () => { $('settings').hidden = true; });
@@ -128,7 +138,7 @@ function startPour(){
   fluid.reset(); t = 0; sinceStart = 0; prevRel = null; prevCup = null; tipFrames = 0;
   score = { inTime:0, pourTime:0, samples:[], spilled:false };
   drift = drift.map(() => Math.random()*Math.PI*2);
-  layerIdx = -1; wasPouring = false;
+  layerIdx = -1; depositing = false;
   cup.scale = 1; steam.progress = 0; $('steam-done').hidden = true;
   setState('pour');
 }
@@ -187,17 +197,19 @@ function frame(ts){
     const px = home.x + (s.x+nx)*cup.R, py = home.y + (s.y+ny)*cup.R;
     let r;
     if(DEV.hand){ tilt.mock = handTilt(sinceStart, dt, lastErr); }
-    if(DEV.auto){ cup.x = home.x + s.x*cup.R; cup.y = home.y; cup.tiltX = cup.tiltY = 0; r = {rawX:0,rawY:0}; if(prevCup){ cup.vx=(cup.x-prevCup.x)/dt; } prevCup={x:cup.x,y:cup.y}; }
+    // perfect play: the cup is held still at home (the pitcher stays put and only the cup drifts, D001)
+    if(DEV.auto){ cup.x = home.x; cup.y = home.y; cup.tiltX = cup.tiltY = 0; r = {rawX:0,rawY:0}; cup.vx = cup.vy = 0; prevCup={x:cup.x,y:cup.y}; }
     else r = cupFromTilt(dt);
     pitcher = { x:px, y:py, flow:s.flow*LEVEL.flowRate, h:s.h, prep:s.prep, prepDir:s.prepDir };
     if(!DEV.auto && checkTip(r)){ score.spilled = true; endPour(); }
     else {
       const T = TUNING.target;
+      const design = { x:(px-home.x)/cup.R, y:(py-home.y)/cup.R };   // where the stream lands on a perfectly held cup
       const rel = { x:(px-cup.x)/cup.R, y:(py-cup.y)/cup.R };
-      // 瞄準輔助：落點往甜蜜點中心拉近一點（只影響落點，不影響杯子位置）
-      rel.x = T.x + (rel.x-T.x)*(1-TUNING.assist); rel.y = T.y + (rel.y-T.y)*(1-TUNING.assist);
+      // 瞄準輔助：只縮小玩家的誤差（杯子偏離的部分），不縮小鋼杯本身的動作，圖案才不會被壓小
+      rel.x = design.x + (rel.x-design.x)*(1-TUNING.assist); rel.y = design.y + (rel.y-design.y)*(1-TUNING.assist);
       pitcher.ix = cup.x + rel.x*cup.R; pitcher.iy = cup.y + rel.y*cup.R;
-      lastErr = { x: rel.x - T.x, y: rel.y - T.y };
+      lastErr = { x: rel.x - design.x, y: rel.y - design.y };
       const q = ((rel.x-T.x)/T.rx)**2 + ((rel.y-T.y)/T.ry)**2;
       const inside = q <= 1;
       const fuzz = inside ? 0 : Math.min(1, (Math.sqrt(q)-1)/TUNING.pour.fuzzSoft); // 剛出界只糊一點，越遠越糊
@@ -216,17 +228,23 @@ function frame(ts){
         let amount = P.amountPerFrame * f * (dt*60);
         let jet = P.jetStrength * f * (0.55 + 0.75*h) * LEVEL.gravity;
         let push = P.pushStrength * f * (1 - 0.6*h) * LEVEL.gravity * LEVEL.flowRate;
-        let vx = rvx*P.momentum, vy = jet + rvy*P.momentum;
+        // a high pour sinks under the crema: almost no white on the surface and little spreading
+        const surf = 1 - smoothstep(P.sinkH[0], P.sinkH[1], h), dep = f*surf;
+        amount *= Math.max(P.sinkTint, surf); push *= Math.max(P.pushMinSurf, surf);
+        if(dep > P.layerOn && !depositing){ depositing = true; layerIdx++; } else if(dep < P.layerOff) depositing = false;
+        let vx = rvx*P.momentum, vy = P.jetDir*jet + rvy*P.momentum;
         if(fuzz > 0){ // 落在甜蜜點外：亂流、奶泡沉下去、圖案糊掉（依出界距離漸進）
           const a = Math.random()*Math.PI*2; vx += Math.cos(a)*P.fuzzJet*fuzz; vy += Math.sin(a)*P.fuzzJet*fuzz;
           dyeR *= 1 + (P.fuzzDyeScale-1)*fuzz; amount *= 1 - (1-P.fuzzAmount)*fuzz; push *= 1 - (1-P.fuzzPush)*fuzz;
         }
         const clampV = Math.min(1.2, Math.hypot(vx,vy)); const L = Math.hypot(vx,vy)||1; vx = vx/L*clampV; vy = vy/L*clampV;
-        if(!wasPouring) layerIdx++;
-        fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount, P.layerIds[layerIdx % P.layerIds.length]);
+        const lid = s.L !== undefined ? s.L : Math.max(0, layerIdx);   // pattern data may name the layer (one leaf per wiggle)
+        const ids = pattern.layerIds || P.layerIds;
+        fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount, ids[lid % ids.length]);
         fluid.setPush(u, v, P.pushSigma, push, P.pushR0);
-      } else fluid.setPush(u, v, P.pushSigma, 0, P.pushR0);
-      wasPouring = pouring;
+        // conveyor toward the player (UV -v), only while milk is surfacing (low pour)
+        fluid.setConveyor(0, P.jetDir < 0 ? -1 : 1, P.conveyor*f*surf*LEVEL.flowRate, P.conveyorW, P.conveyorL);
+      } else { fluid.setPush(u, v, P.pushSigma, 0, P.pushR0); fluid.setConveyor(0, -1, 0, P.conveyorW, P.conveyorL); }
       // 杯子加速度 → 液面晃動
       const sl = P.slosh*(1 + 2*LEVEL.cupDisturbance);
       const fx = -cup.ax/cup.R*0.5*sl, fy = cup.ay/cup.R*0.5*sl;
