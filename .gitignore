@@ -1,2 +1,5 @@
 .DS_Store
 .gstack/
+*.zip
+.env
+.mcp.json

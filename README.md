@@ -1,5 +1,11 @@
 # 拉花遊戲（暫名）：第一階段手感原型
 
+線上：https://c6ntech.github.io/latte-art-proto/
+
+**工作文件在 `Docs/`**：任務書 `Docs/TASK.md`、計畫 `Docs/PLAN.md`、復盤 `Docs/RETRO.md`、決策 `Docs/DECISIONS.md`、佇列 `Docs/TODO.md`、現況 `Docs/state/STATE.md`、工具 `Docs/TOOLS.md`。工作規則在 `CLAUDE.md`。
+
+以下是技術說明（流體、傾斜、判定、動作資料）。
+
 手機瀏覽器玩的原型，驗證「用手機當杯子、靠陀螺儀跟著奶泡鋼杯移動」好不好玩。
 只做一套動作（鬱金香），不做關卡、廣告、造型。
 
