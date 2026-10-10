@@ -12,7 +12,7 @@ import re, sys, pathlib
 v = sys.argv[1]
 root = pathlib.Path('.')
 mods = sorted(str(p).replace('\\', '/') for p in root.glob('js/**/*.js'))
-entries = ',\n'.join(f'    "./{m}": "./{m}?v={v}"' for m in mods)
+entries = ',\n'.join(['    "three": "./vendor/three-0.170.0.module.min.js"'] + [f'    "./{m}": "./{m}?v={v}"' for m in mods])
 block = f'<!--importmap:start-->\n<script type="importmap">\n{{ "imports": {{\n{entries}\n}} }}\n</script>\n<!--importmap:end-->'
 html = (root / 'index.html').read_text(encoding='utf-8')
 if '<!--importmap:start-->' in html:

@@ -6,7 +6,6 @@
 - [ ] T004 P0 A14 設定「進階」調參面板：飄移幅度/速度、輔助、甜蜜點寬、靈敏度，即時生效 · 檢查 owner 滑桿能找到好玩的值
 - [ ] T005 P0 -- Docs/ACCEPTANCE.json 從 TASK §3 產生；tools/sim.sh 截圖存 Docs/progress/ · 檢查 檔案存在
 - [ ] T007 P0 A10 Reviewer 子代理對現在的完美操作截圖打分、列三個最糟缺點 · 檢查 Docs/reviews/ 一份
-- [ ] T008 P1 -- .claude/hooks/reanchor.sh：SessionStart 印 STATE、TODO 前 10 行、git log · 檢查 /hooks 看得到
 - [ ] T009 P0 A14 P1 第一輪：owner 手機 5–10 杯回傳數據，重播分析手抖頻譜與偏移 · 檢查 Docs/replays/ 有檔、DEVLOG 一行
 - [ ] T010 P1 A03 候選：飄移改加速度模型（D004 的例外試驗），只在 owner 說不像端杯子時做 · 檢查 owner 比較兩版
 - [ ] T011 P1 A10 甜蜜點縮回偏上一小塊、圖案前後位移改用高度與流量表達 · 檢查 auto 截圖仍是四層鬱金香

@@ -32,7 +32,7 @@ for f in js/*.js js/patterns/*.js; do node --check "$f" || echo "FAIL $f"; done
 
 | 什麼時候 | 指令 | 期待 |
 |---|---|---|
-| 每次 | `SHOTS=Docs/progress/$(date +%F) tools/sim.sh auto auto=1` | 成功，四層鬱金香 |
+| 每次 | `SHOTS=Docs/progress/$(date +%F) tools/sim.sh auto auto=1` | 成功，葉子（rosetta）成形、置中（D011） |
 | 動了手感 | `tools/sim.sh hand hand=1`（跑 3 次） | 有過有不過 |
 | 動了手感 | `tools/sim.sh play "hand=1&play=1"`（跑 3 次） | 全過 |
 

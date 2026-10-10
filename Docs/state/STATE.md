@@ -1,29 +1,30 @@
 # STATE（整份重寫，不 append；60 行以內）
-更新：2026-10-10 · 線上版本 v1010-1337 · 階段 P0 工作流基礎 + A0 3D 呈現
+更新：2026-10-10 · 線上版本 v1010-1446 · 計畫 v3（Docs/PLAN.md）
 
 ## 現在
-**v1010-1337：一次倒完不中斷（D010）、預設圖案葉子 rosetta（D011）、瞄準輔助只縮小玩家誤差（D012）。** 鬱金香在 ?pattern=tulip。
-3D 呈現（D007）已上線：three.js r170、程式生成的稜角杯子/杯盤/鋼杯/手、canvas 像素貼圖、流體 72 格液面、杯子隨手機傾斜、揭曉鏡頭拉近。2D 在設定裡可切回。
-奶泡分層（D009）：每段注入一個層 id，相遇處畫咖啡色線；完美操作下是有層次的鬱金香。
-版本號（T001）：右下角 v1010-1232；tools/stamp.sh 寫 import map 破 Pages 快取。
-Reviewer r2（Docs/reviews/review-2026-10-10-style-r2.md）：幾何 7、貼圖 5、光影 7、色調 6、拉花 5、手 4、整體 6。r2 後已改：顆粒加強（grain 1.6）、奶流變細變奶油色並漸細。
+等 owner 回覆 `Docs/KIT_ADOPTION.md` 的 16 個決定（Q1–Q16）。計畫 v3 依這些決定排序。
+本 session 完成：工具包全文審閱（Docs/kit-review/01–04）、Blender 管線與 Blender MCP（D013）、工具移植、文件矛盾修正。
+遊戲：一次倒完的葉子（D010–D012）、Blender 素材（杯、鋼杯＋手、桌面）、程式版備用（?assets=0）。
 
-## 下一步（照順序）
-1. owner 手機試玩 v1010-1337：3D 與 2D 比較手感（T020）、fps（設定 › 顯示除錯數據）
-2. T002 複製數據 + T003 重播（手感數據回流）
-3. T018 葉子大小、中間的莖、底端咖啡色洞
-4. T019 手的造型（Reviewer 最低分 4）
+## 下一步（照順序，依 owner 決定）
+1. Q-0 量測工具：?shot= 成形條、checks.json、覆蓋/對稱/葉數/莖長、核准版截圖比對（Q3、Q5）
+2. F-0 數據回流：T002 複製數據、T003 重播、T004 調參面板（Q9）
+3. Q-1 參考：葉子照與俯拍倒奶影片（Q2，需 owner 或我找授權影片）
+4. A-2 手的姿勢頁（Q8）
 
 ## 等 owner
-- 手機試玩 v1010-1337 的回報（版本號要對）
+- KIT_ADOPTION.md 的 Q1–Q16
+- 手機試玩 v1010-1446（右下角版本要對）：葉子、Blender 素材、搖晃看起來是不是手在跳
+- Q10 要用 fal 的話：金鑰與預算上限；Q15：adb 加 PATH、Pixel 接線
 
 ## 死路（不要再試）
 - claude.ai Artifact 放遊戲：裝置動作 API 被封鎖（D003）
 - gstack headless 測 WebGL：沒有 WebGL2，要 browse connect --force-restart
-- 高斯推開場求分層：調不出來；1/r 推開 + 層 id 才行（D009）
+- 高斯推開或噴流求葉形：只會捲成兩瓣蝴蝶；要輸送帶模型（D011）
+- 雙側分層線：細葉變棕色網格；要單側一格（D011）
 - 金屬度高但沒有環境貼圖：鋼杯會變黑
-- python urllib 抓 https：這台沒 CA 憑證，用 curl
+- python urllib 抓 https：系統 Python 沒憑證；用 curl 或 .venv
 
 ## 健康
-sim（手機尺寸 390×844，rosetta）：auto 100% · hand=1 100/89/92% · hand=1&play=1 100/98/100% · 2D 100% · console 無錯
-3D 效能（桌機）：5 次繪製、約 540 三角形、60 fps · 手機 fps 未量
+sim（390×844、rosetta、Blender 素材）：auto 100% · hand 91% · play 100% · 2D 100% · ?assets=0 100% · console 無錯
+3D：5 次繪製、約 510 三角形 · 手機 fps 未量 · tools/check_env.py：只缺 FAL_KEY、手機連線

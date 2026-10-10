@@ -13,12 +13,12 @@ description: 拉花成品的視覺評審 — 用新 context 的子代理把遊�
   - 遊戲截圖：<路徑，最多 6 張>
   - 參考照：Docs/concepts/approved/*（README 說明每張用途）
 先做：python3 tools/contact_sheet.py "<截圖 glob>" --out Docs/reviews/<車道>_game.jpg
-      python3 tools/contact_sheet.py "Docs/concepts/approved/*.jpg" --out Docs/reviews/<車道>_ref.jpg
+      python3 tools/contact_sheet.py "Docs/concepts/approved/latte/*.jpg" --out Docs/reviews/<車道>_ref.jpg   # 評圖案；評風格改用 approved/style/
 只看這兩張合成圖。
 評分（各 1–10，對照參考照）：
   1. 層次：每一瓣有沒有分開，中間有沒有咖啡色線
   2. 邊緣：白與咖啡的交界是否清楚、有沒有淡棕色邊
-  3. 形狀：整體像不像鬱金香（對稱、上寬下窄、層數）
+  3. 形狀：整體像不像 Docs/concepts/approved/latte/rosetta_owner_ref.jpg 的葉子（約 7 對葉片沿中線疊、上窄下寬、左右對稱、置中、約佔杯面 65%）
   4. 莖：有沒有一條白色的莖或切口
   5. 質感：像不像真的奶泡（不是塑膠、不是霧）
   6. 失敗時：糊掉的那杯是否「看得出是哪一段糊」

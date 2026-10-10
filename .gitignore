@@ -3,3 +3,9 @@
 *.zip
 .env
 .mcp.json
+.venv/
+*.blend1
+Docs/state/history/
+Docs/state/STALE_AT_COMPACT
+.claude/settings.local.json
+Docs/progress/_out/

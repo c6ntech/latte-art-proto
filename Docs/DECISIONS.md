@@ -59,3 +59,9 @@
 為什麼：舊做法把落點往甜蜜點中心拉 30%，連鋼杯的設計動作也縮小，圖案被壓小、搖晃被吃掉。
 做法：落點 = 設計落點 + 玩家誤差 ×（1 − assist）。強度不變，所以對玩家的難度不變。
 影響：`main.js` 注入段；模擬：hand 100/89/92%、play 100/98/100%。
+
+## D013 · 2026-10-10 · 素材改用 Blender 設計（取代 D008 的「程式生成為主」）
+為什麼：owner：「use blender to design all relevant assets for the project」。
+做法：`art/blender/build_assets.py`（背景 Blender 腳本，可重跑）產生 `assets/models/*.glb`、`art/textures/*.png`、`art/previews/*.png`、可編輯 `.blend`；
+遊戲載入 GLB 取代程式版，載入失敗時保留程式版（`?assets=0` 強制程式版）。風格規則不變（STYLE_BIBLE：低面數、像素貼圖、最近鄰）。Blender MCP 已裝供互動調整。
+取代：D008。影響：`js/scene3d.js`（loadAssets）、`tools/stamp.sh`（import map 加 three）、Docs/TOOLS.md、ART_DIRECTION.md。

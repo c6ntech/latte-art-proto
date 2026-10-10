@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def font(size):
-    for name in ("arial.ttf", "segoeui.ttf", "DejaVuSans.ttf"):
+    for name in ("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc", "arial.ttf", "segoeui.ttf", "DejaVuSans.ttf"):
         try:
             return ImageFont.truetype(name, size)
         except OSError:
@@ -35,10 +35,13 @@ def main():
         files = files[-a.last:]
     if not files:
         raise SystemExit(f"no images match {a.pattern}")
-    cols = a.cols or math.ceil(math.sqrt(len(files) * 16 / 9 / 1.4))
+    # cell shape follows the first image (our captures are portrait phone screens, not 16:9)
+    with Image.open(files[0]) as first:
+        ratio = first.height / first.width
+    cols = a.cols or math.ceil(math.sqrt(len(files) * ratio * 1.4))
     rows = math.ceil(len(files) / cols)
     cell_w = a.max_edge // cols
-    cell_h = int(cell_w * 9 / 16)
+    cell_h = int(cell_w * ratio)
     cap = 22
     if rows * (cell_h + cap) > a.max_edge:
         scale = a.max_edge / (rows * (cell_h + cap))

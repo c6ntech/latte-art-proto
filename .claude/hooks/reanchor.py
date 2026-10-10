@@ -31,9 +31,20 @@ head = "\n".join(l[:180] for l in todo[:10]) or "(no open items)"
 if len(todo) > 10:
     head += f"\n(+{len(todo) - 10} more)"
 
+warning = ""
+flag = ROOT / "Docs" / "state" / "STALE_AT_COMPACT"
+if flag.exists():
+    warning = "WARNING: " + flag.read_text(encoding="utf-8", errors="replace").strip()
+    try:
+        flag.unlink()
+    except Exception:  # noqa: BLE001
+        pass
+
 pack = "\n".join([
     "# Re-anchor (project hook)",
-    "Follow CLAUDE.md section 1: continue from STATE 'Next 1'. Do not re-read Docs/TASK.md in full.",
+    "CLAUDE.md is already in context. Do not re-read CLAUDE.md, Docs/TASK.md, PLAN.md, DEVLOG.md or DECISIONS.md now.",
+    "Continue from STATE 'Next 1'. Open only the files you are about to change.",
+    warning,
     "",
     "## Docs/state/STATE.md",
     read("Docs/state/STATE.md", 3500),

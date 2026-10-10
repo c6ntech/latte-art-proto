@@ -3,6 +3,8 @@
 // World axes: x right, y up, z toward the player (screen down). The liquid surface is the fluid canvas as a texture.
 import * as THREE from '../vendor/three-0.170.0.module.min.js';
 import { TUNING } from './config.js';
+import { GLTFLoader } from '../vendor/three-addons/loaders/GLTFLoader.js';
+import { VERSION } from './version.js';
 
 const V = () => TUNING.view3d;
 
@@ -96,6 +98,8 @@ export class Scene3D {
     this.buildPitcher();
     this.buildStream();
     this.resize();
+    this.assets = [];   // names of Blender assets that replaced the code-built ones
+    if(!/[?&]assets=0/.test(location.search)) this.loadAssets();
   }
 
   buildLights(){
@@ -113,7 +117,7 @@ export class Scene3D {
     const tex = makeTexture(64, 32, wood(7), [V().tableRepeat/2, V().tableRepeat]);
     const table = new THREE.Mesh(new THREE.PlaneGeometry(36, 36), mat(tex, { roughness: 0.85, flatShading: false }));
     table.rotation.x = -Math.PI/2; table.receiveShadow = true;
-    this.scene.add(table);
+    this.scene.add(table); this.tableProc = table;
   }
 
   buildCup(latteSource){
@@ -128,7 +132,7 @@ export class Scene3D {
     this.cupRoot = new THREE.Group();          // translation only (follows the game's cup position)
     this.cupTilt = new THREE.Group();          // visual tilt from the phone, pivot at the liquid centre
     this.cupRoot.add(this.cupTilt);
-    const body = new THREE.Group(); body.position.y = -LIQ;   // so the pivot is the liquid surface centre
+    const body = this.cupBody = new THREE.Group(); body.position.y = -LIQ;   // so the pivot is the liquid surface centre
     this.cupTilt.add(body);
     body.add(new THREE.Mesh(lathe(cupProfile, seg), ceramicMat));
     const saucerMat = mat(makeTexture(32, 32, noisy(0xe2dccf, 4, 0.05, 0.05), [8, 2]), { roughness: 0.5 });
@@ -182,6 +186,7 @@ export class Scene3D {
     const hb = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.75, 0.14), dark); hb.position.set(-0.78, 0.68, 0); this.pitcherTilt.add(hb);
     for(const y of [0.98, 0.38]){ const c = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.12), dark); c.position.set(-0.64, y, 0); this.pitcherTilt.add(c); }
     this.pitcherTilt.add(this.buildHand());
+    this.pitcherProc = [...this.pitcherTilt.children];
     shadowy(this.pitcherRoot);
     this.scene.add(this.pitcherRoot);
   }
@@ -218,6 +223,38 @@ export class Scene3D {
     this.bits = [];
     const bitGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
     for(let i=0;i<18;i++){ const b = new THREE.Mesh(bitGeo, milk); b.visible = false; b.userData = { life: 0, v: new THREE.Vector3() }; this.scene.add(b); this.bits.push(b); }
+  }
+
+  // Blender assets (art/blender/build_assets.py -> assets/models/*.glb). Each one replaces its code-built
+  // stand-in once it has loaded; if a file fails, the stand-in stays. ?assets=0 forces the stand-ins.
+  async loadAssets(){
+    const loader = new GLTFLoader();
+    const load = async name => {
+      const g = await loader.loadAsync(`assets/models/${name}.glb?v=${VERSION}`);
+      g.scene.traverse(o => {
+        if(!o.isMesh) return;
+        o.castShadow = true; o.receiveShadow = true;
+        const m = o.material;
+        if(m && m.map){ m.map.magFilter = THREE.NearestFilter; m.map.minFilter = THREE.NearestFilter; m.map.generateMipmaps = false; m.map.needsUpdate = true; }
+      });
+      g.scene.updateMatrixWorld(true);
+      return g.scene;
+    };
+    const tryLoad = async (name, apply) => {
+      try { apply(await load(name)); this.assets.push(name); }
+      catch(e){ console.warn(`asset ${name} not loaded, keeping the code-built stand-in`, e); }
+    };
+    await Promise.all([
+      tryLoad('table', s => { this.tableProc.visible = false; s.traverse(o => { if(o.isMesh) o.castShadow = false; }); this.scene.add(s); }),
+      tryLoad('cup', s => { for(const c of this.cupBody.children) c.visible = false; this.cupBody.add(s); }),
+      tryLoad('pitcher', s => {
+        const tip = s.getObjectByName('spout_tip');
+        if(tip) this.spoutLocal = new THREE.Vector3().setFromMatrixPosition(tip.matrixWorld);
+        for(const c of this.pitcherProc) c.visible = false;
+        this.pitcherTilt.add(s);
+      }),
+      tryLoad('customer_hand', s => { s.visible = false; this.customerHand = s; this.scene.add(s); })   // for the transitions (not wired yet)
+    ]);
   }
 
   resize(){

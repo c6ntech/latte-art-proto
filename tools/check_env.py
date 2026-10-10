@@ -98,7 +98,7 @@ hooks = ROOT / ".claude/settings.json"
 row("OK" if hooks.exists() else "MISSING", "project hooks", ", ".join((json.loads(hooks.read_text()).get("hooks") or {}).keys()) if hooks.exists() else "")
 skills = sorted(p.parent.name for p in (ROOT / ".claude/skills").glob("*/SKILL.md"))
 row("OK" if skills else "MISSING", "project skills", ", ".join(skills))
-approved = [p for p in (ROOT / "Docs/concepts/approved").glob("*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]
+approved = [p for p in (ROOT / "Docs/concepts/approved").rglob("*") if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]
 row("OK" if approved else "WARN", "reference photos", f"{len(approved)} image(s)" if approved else "Docs/concepts/approved/ is empty (T006)")
 
 print("\n".join(lines))
