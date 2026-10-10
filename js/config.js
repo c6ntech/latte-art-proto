@@ -20,7 +20,8 @@ export const TUNING = {
   balance: { amp: 0.5, speed: 0.08, yScale: 0.5, ramp: 4 },
   assist: 0.3, // 瞄準輔助：落點往甜蜜點中心拉近的比例（0 = 完全真實）
   // 流體
-  sim: { simRes: 128, dyeRes: 384, pressureIters: 20, curl: 1, velDissipation: 3.0 },
+  // layerLine: 兩次注入的奶泡相遇時畫分層線的門檻（層 id 差）
+  sim: { simRes: 128, dyeRes: 384, pressureIters: 20, curl: 1, velDissipation: 3.0, layerLine: 0.12 },
   // 牛奶注入（UV 單位）
   pour: {
     dyeSigma: 0.028, dyeSigmaLow: 0.03,   // 奶流半徑：低拿（h=0）粗、高拿（h=1）細
@@ -29,9 +30,26 @@ export const TUNING = {
     jetStrength: 0.03, jetSigma: 0.045,     // 向前噴流（讓奶泡往前推、堆疊）
     momentum: 0.15,                           // 鋼杯相對杯子的速度帶入流場的比例
     slosh: 0.04,                             // 杯子加速度對液面的影響
-    fuzzJet: 0.3, fuzzDyeScale: 1.6, fuzzAmount: 0.6, fuzzPush: 0.5, fuzzSoft: 0.25 // 落在甜蜜點外時的糊掉
+    fuzzJet: 0.3, fuzzDyeScale: 1.6, fuzzAmount: 0.6, fuzzPush: 0.5, fuzzSoft: 0.25, // 落在甜蜜點外時的糊掉
+    layerIds: [0.15, 0.55, 0.95, 0.35, 0.75]   // 每一次開始注入換一個層 id，相鄰兩層差 ≥ 0.4，分層線才畫得出來
   },
   // 畫面
   view: { cupRadiusFrac: 0.29, cupCenterY: 0.56 },
+  // 3D 呈現（D007）：低面數 + 像素貼圖 + 接近俯視。單位 = 杯子半徑。只影響畫面，不影響判定與手感。
+  view3d: {
+    latteTexels: 72,                 // 液面像素格數（直徑）
+    cupSegments: 12, pitcherSegments: 10,
+    fov: 30, pitch: 70,              // 鏡頭：垂直視角、俯角（90 = 正上方）
+    frameWidth: 5.0, frameHeight: 8.0, lookAt: [0.3, 0.6, -0.7],
+    revealPitch: 82, revealZoom: 0.55, revealShift: 0.9,
+    cupLift: 0.35,                   // 杯子離桌面的高度（被拿在手上）
+    tiltVisual: 0.6, tiltMax: 14,    // 杯子畫面傾斜 = 手機角度 × 0.6，上限 14°
+    pitcherYaw: -1.99,               // 鋼杯在杯子遠側偏右，壺嘴朝玩家方向
+    tiltIdle: 0.35, tiltPour: 0.7,   // 鋼杯傾倒角（弧度）
+    spoutHeight: 0.55, spoutHeightH: 1.1, spoutBack: [0.15, -0.4],   // 壺嘴相對落點：高度、往遠側偏移（x, z）
+    tableRepeat: 18,
+    grain: 1.6,                      // 所有程式貼圖的雜訊強度倍率（Reviewer r2：手機尺寸下顆粒太淡）
+    sun: 2.1, ambient: 0.9, exposure: 1.0, background: 0x2a1d14
+  },
   prepLead: 0.35 // 預備動作提前秒數
 };

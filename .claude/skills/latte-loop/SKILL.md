@@ -40,7 +40,7 @@ for f in js/*.js js/patterns/*.js; do node --check "$f" || echo "FAIL $f"; done
 
 ## 4. 版本、commit、push
 
-- T001 完成後：`tools/stamp.sh` 寫 `js/version.js`（短 hash 與日期），畫面右下角顯示。
+- `tools/stamp.sh`：寫 `js/version.js`（月日-時分）並更新 `index.html` 的 import map，每個模組帶 `?v=`，破 Pages 的 10 分鐘快取。版本顯示在畫面右下角。
 - commit 訊息：改了什麼、為什麼、怎麼驗；附 TODO ID。
 - `git push origin main`
 

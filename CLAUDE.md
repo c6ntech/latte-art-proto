@@ -56,7 +56,7 @@
 - 專案 hooks（`.claude/settings.json`）：SessionStart 自動印 STATE/TODO/git；每次 Edit/Write `.js` 自動 `node --check`，失敗會被擋下，先修；子代理自動拿到車道合約。
 - 專案技能：`latte-loop`（改完到部署回報的每一步）、`latte-review`（Reviewer 任務卡）、`fal-ai-generation`（owner 的生圖與圖轉 3D 做法）。
 - 全部工具現況：`python3 tools/check_env.py`；清單與缺口：`Docs/TOOLS.md`。
-- 美術方向與建模分工：`Docs/ART_DIRECTION.md`（3D-lite 提案，待 D007）。生圖前必讀 `knowledge/`。
+- 視覺：任何畫面改動前讀 `Docs/STYLE_BIBLE.md`（D007 低面數 + 像素貼圖、接近俯視）。素材以程式生成為主（D008）。生圖前必讀 `knowledge/`。
 
 ## 7. 邊界
 

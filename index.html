@@ -14,6 +14,9 @@
 html,body{ height:100%; margin:0; overflow:hidden; overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none; }
 body{ background:radial-gradient(120% 90% at 50% 40%, var(--table) 0%, var(--table2) 100%); color:var(--ink); font-family:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif; font-size:15px; line-height:1.5; position:relative; }
 canvas#cup{ position:absolute; left:0; top:0; border-radius:50%; will-change:transform; z-index:1; }
+canvas#view3d{ position:absolute; left:0; top:0; z-index:1; display:block; }
+#vignette{ position:absolute; inset:0; z-index:2; pointer-events:none; background:radial-gradient(ellipse 75% 60% at 50% 52%, rgba(0,0,0,0) 55%, rgba(14,8,4,0.5) 100%); }
+#build{ position:absolute; right:8px; bottom:calc(6px + env(safe-area-inset-bottom,0px)); z-index:7; font:11px ui-monospace,Menlo,monospace; color:rgba(243,236,226,0.55); pointer-events:none; font-variant-numeric:tabular-nums; }
 canvas#fg{ position:absolute; left:0; top:0; z-index:2; pointer-events:none; }
 #tipwarn{ position:absolute; inset:0; z-index:3; pointer-events:none; opacity:0; box-shadow:inset 0 0 120px 30px rgba(226,80,60,0.75); }
 #hud{ position:absolute; left:0; right:0; top:0; z-index:4; padding-top:env(safe-area-inset-top,0px); }
@@ -47,7 +50,10 @@ button:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
 </style>
 </head>
 <body>
+<canvas id="view3d"></canvas>
+<div id="vignette"></div>
 <canvas id="cup"></canvas>
+<div id="build"></div>
 <canvas id="fg"></canvas>
 <div id="tipwarn"></div>
 <div id="hud" hidden><div id="progress"></div></div>
@@ -112,10 +118,27 @@ button:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
     <label><span>傾斜靈敏度（幾度 = 一個杯子半徑）</span><select id="set-deg"><option value="8">8°（靈敏）</option><option value="12">12°</option><option value="16">16°</option><option value="18">18°（預設）</option><option value="24">24°（遲鈍）</option></select></label>
     <label><span>前後方向反轉</span><input id="set-invert" type="checkbox"></label>
     <label><span>顯示除錯數據</span><input id="set-debug" type="checkbox"></label>
+    <label><span>畫面（切換會重新載入）</span><select id="set-view"><option value="3d">3D 像素</option><option value="2d">2D 原型</option></select></label>
     <button id="btn-close-settings" class="ghost">關閉</button>
   </div>
 </div>
 
-<script type="module" src="js/main.js"></script>
+<!--importmap:start-->
+<script type="importmap">
+{ "imports": {
+    "./js/audio.js": "./js/audio.js?v=1010-1232",
+    "./js/config.js": "./js/config.js?v=1010-1232",
+    "./js/fluid.js": "./js/fluid.js?v=1010-1232",
+    "./js/input.js": "./js/input.js?v=1010-1232",
+    "./js/main.js": "./js/main.js?v=1010-1232",
+    "./js/pattern.js": "./js/pattern.js?v=1010-1232",
+    "./js/patterns/tulip.js": "./js/patterns/tulip.js?v=1010-1232",
+    "./js/scene.js": "./js/scene.js?v=1010-1232",
+    "./js/scene3d.js": "./js/scene3d.js?v=1010-1232",
+    "./js/version.js": "./js/version.js?v=1010-1232"
+} }
+</script>
+<!--importmap:end-->
+<script type="module" src="js/main.js?v=1010-1232"></script>
 </body>
 </html>

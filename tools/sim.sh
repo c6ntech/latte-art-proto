@@ -4,6 +4,8 @@
 # 前置: python3 -m http.server 8765 在專案根目錄；browse connect --force-restart（headless 沒有 WebGL2）
 B="$HOME/.claude/skills/gstack/browse/dist/browse"; S=${SHOTS:-/tmp/latte-shots}; mkdir -p "$S"
 TAG=$1; Q=${2:-auto=1}
+# PHONE=1 (default) emulates a 390x844 phone at DPR 3; PHONE=0 keeps the desktop window
+if [ "${PHONE:-1}" = "1" ]; then $B cdp Emulation.setDeviceMetricsOverride '{"width":390,"height":844,"deviceScaleFactor":3,"mobile":true}' >/dev/null 2>&1; else $B cdp Emulation.clearDeviceMetricsOverride '{}' >/dev/null 2>&1; fi
 $B goto "http://localhost:8765/?$Q&r=$RANDOM" >/dev/null 2>&1
 $B js "document.getElementById('btn-enable').click(); 'clicked'" >/dev/null 2>&1; sleep 0.4
 $B js "document.getElementById('btn-calib').click(); 'ok'" >/dev/null 2>&1; sleep 0.3

@@ -61,17 +61,54 @@ void main(){
   vec4 res = texture(uSource, coord) / (1.0 + uDissipation*uDt);
   frag = mix(res, res*cupMask(vUv), uMask); }`,
 
-  splat: HEAD + `uniform sampler2D uTarget; uniform vec2 uPoint; uniform vec3 uColor; uniform float uRadius, uMode;
+  // Dye is RG: R = milk amount, G = which pour (layer id) the milk came from, mass-weighted where pours mix.
+  splat: HEAD + `uniform sampler2D uTarget; uniform vec2 uPoint; uniform vec3 uColor; uniform float uRadius, uMode, uLayer;
 void main(){ vec2 p=vUv-uPoint; float s=exp(-dot(p,p)/uRadius); vec3 base=texture(uTarget,vUv).xyz;
-  vec3 v = base + s*uColor;
-  if(uMode>0.5) v = min(v, vec3(1.0)); else v *= cupMask(vUv);
+  if(uMode>0.5){
+    float add = s*uColor.x, r0 = base.x;
+    float g = (base.y*r0 + uLayer*add) / max(r0 + add, 1e-4);
+    frag = vec4(min(r0 + add, 1.0), g, 0.0, 1.0); return;
+  }
+  vec3 v = (base + s*uColor) * cupMask(vUv);
   frag=vec4(v,1.0); }`,
 
   force: HEAD + `uniform sampler2D uVel; uniform vec2 uForce; uniform float uDt;
 void main(){ frag=vec4((texture(uVel,vUv).xy + uForce*uDt)*cupMask(vUv),0.0,1.0); }`,
 
   display: HEAD + `uniform sampler2D uDye; uniform vec3 uCoffee, uMilk, uEdge; uniform float uTarget; uniform vec4 uTargetEll; uniform vec2 uTexel;
+uniform float uPixel, uOut, uLayerLine; uniform vec3 uCrema;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
 void main(){
+  if(uPixel > 0.5){
+    // Pixel mode: the canvas is uOut x uOut, so one fragment = one texel of the latte surface.
+    // Average the dye over the texel, step the milk amount into a few tones, add fixed per-texel noise.
+    // 3x3 taps inside the texel. Coffee wins over milk (min), so the thin coffee lines between layers survive
+    // the downsampling; texels that straddle a milk/coffee boundary get the edge tone.
+    float s = 0.33/uOut; vec2 cell = floor(vUv*uOut);
+    float dsum = 0.0, dmin = 1e3, dmax = -1e3, gmin = 1e3, gmax = -1e3;
+    for(int i=-1;i<=1;i++) for(int j=-1;j<=1;j++){
+      vec2 t = texture(uDye, vUv + vec2(float(i), float(j))*s).xy; dsum += t.x; dmin = min(dmin, t.x); dmax = max(dmax, t.x);
+      if(t.x > 0.3){ gmin = min(gmin, t.y); gmax = max(gmax, t.y); } }
+    float dp = mix(dsum/9.0, dmin, 0.65);
+    float mp = floor(smoothstep(0.14, 0.42, dp)*4.0 + 0.5)/4.0;
+    // coffee tones: darker toward the cup wall; a crema halo where a little milk sits just under the surface
+    float rr0 = length((vUv - 0.5)*2.0);
+    vec3 coffee = uCoffee*(1.0 + (hash(floor(cell/3.0)) - 0.5)*0.18) * mix(1.0, 0.72, smoothstep(0.7, 1.0, rr0));
+    vec3 crema = uCrema*(1.0 + (hash(floor(cell/2.0) + 7.0) - 0.5)*0.12);
+    coffee = mix(coffee, crema, smoothstep(0.02, 0.12, dsum/9.0)*0.85);
+    vec3 cp = mix(coffee, uMilk, mp);
+    if(mp > 0.2 && mp < 0.8) cp = mix(cp, uEdge, 0.35);
+    if(dmax > 0.3 && dmin < 0.2) cp = mix(cp, uEdge*0.8, 0.45);
+    // two pours meet inside this texel: draw the thin coffee line that separates tulip layers
+    if(mp > 0.4 && gmax - gmin > uLayerLine) cp = mix(cp, uEdge*0.7, 0.8);
+    cp *= 1.0 + (hash(cell) - 0.5)*0.09;
+    if(uTarget>0.0){ // faint dashed guide ring (UI, not latte art); brighter while the stream is inside
+      vec2 q=(vUv-uTargetEll.xy)/uTargetEll.zw; float rr=length(q);
+      float tw = 0.8/(uOut*min(uTargetEll.z, uTargetEll.w));
+      float dash = step(0.5, fract(atan(q.y, q.x)*3.8197));
+      cp = mix(cp, vec3(0.95, 0.9, 0.8), step(abs(rr-1.0), tw)*dash*0.3*min(uTarget, 1.6)); }
+    frag = vec4(cp, 1.0); return;
+  }
   float d = texture(uDye,vUv).x;
   float dx = texture(uDye, vUv+vec2(uTexel.x,0.0)).x - texture(uDye, vUv-vec2(uTexel.x,0.0)).x;
   float dy = texture(uDye, vUv+vec2(0.0,uTexel.y)).x - texture(uDye, vUv-vec2(0.0,uTexel.y)).x;
@@ -79,6 +116,12 @@ void main(){
   float edge = smoothstep(0.06,0.16,d)*(1.0-smoothstep(0.16,0.3,d));
   vec3 col = mix(uCoffee, uMilk, m);
   col = mix(col, uEdge, edge*0.6);
+  { // layer lines (2D mode): where milk from different pours meets
+    vec2 a = texture(uDye, vUv+vec2(uTexel.x,0.0)).xy, b = texture(uDye, vUv-vec2(uTexel.x,0.0)).xy;
+    vec2 c = texture(uDye, vUv+vec2(0.0,uTexel.y)).xy, e = texture(uDye, vUv-vec2(0.0,uTexel.y)).xy;
+    float both = step(0.3, min(min(a.x,b.x), min(c.x,e.x)));
+    float lg = max(abs(a.y-b.y), abs(c.y-e.y));
+    col = mix(col, uEdge*0.7, both*smoothstep(uLayerLine*0.25, uLayerLine*0.6, lg)*0.8); }
   float band = m*(1.0-m)*4.0;
   float shade = clamp(1.0 + (-dx*0.35 + dy*0.9)*1.4*band, 0.9, 1.08);
   col *= shade;
@@ -142,7 +185,7 @@ export class Fluid {
   constructor(canvas, opts={}){
     this.canvas = canvas;
     this.opts = Object.assign({ simRes:128, dyeRes:384, pressureIters:20, curl:4,
-      velDissipation:1.6, dyeDissipation:0.0, cupShape:[1,1],
+      velDissipation:1.6, dyeDissipation:0.0, cupShape:[1,1], layerLine:0.12, crema:[0.56,0.36,0.21],
       coffee:[0.36,0.21,0.11], milk:[0.96,0.93,0.87], edge:[0.55,0.36,0.2] }, opts);
     const gl = canvas.getContext('webgl2', { alpha:false, depth:false, stencil:false, antialias:false, preserveDrawingBuffer:false, powerPreference:'high-performance' });
     if(!gl) throw new Error('no-webgl2');
@@ -172,7 +215,7 @@ export class Fluid {
   initFBOs(){
     const gl=this.gl, o=this.opts, s=o.simRes, d=o.dyeRes;
     this.velocity = createDouble(gl, s, s, this.fmtRG, this.type, gl.LINEAR);
-    this.dye = createDouble(gl, d, d, this.fmtR, this.type, gl.LINEAR);
+    this.dye = createDouble(gl, d, d, this.fmtRG, this.type, gl.LINEAR);
     this.divergence = createFBO(gl, s, s, this.fmtR, this.type, gl.NEAREST);
     this.curl = createFBO(gl, s, s, this.fmtR, this.type, gl.NEAREST);
     this.pressure = createDouble(gl, s, s, this.fmtR, this.type, gl.NEAREST);
@@ -191,7 +234,8 @@ export class Fluid {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
   // x,y in UV (0..1). vx,vy velocity in UV/s. dyeR / velR are gaussian sigma in UV. amount: dye per call.
-  splat(x, y, vx, vy, velR, dyeR, amount){ this.pendingSplats.push({x,y,vx,vy,velR,dyeR,amount}); }
+  // layer: id of the current pour (0..1); each new pour gets a distinct value so its boundary with older milk shows
+  splat(x, y, vx, vy, velR, dyeR, amount, layer=0.5){ this.pendingSplats.push({x,y,vx,vy,velR,dyeR,amount,layer}); }
   setPush(x, y, sigma, strength, r0){ this.push.x=x; this.push.y=y; this.push.r=sigma*sigma; this.push.str=strength; this.push.r0=r0||0.03; }
   setForce(fx, fy){ this.force=[fx,fy]; }
 
@@ -223,6 +267,7 @@ export class Fluid {
           gl.uniform2fv(p.splat.u.uTexel, this.dye.texel);
           gl.uniform1i(p.splat.u.uTarget, this.dye.read.attach(0));
           gl.uniform3f(p.splat.u.uColor, s.amount, 0, 0); gl.uniform1f(p.splat.u.uRadius, s.dyeR*s.dyeR); gl.uniform1f(p.splat.u.uMode, 1);
+          gl.uniform1f(p.splat.u.uLayer, s.layer);
           this.blit(this.dye.write); this.dye.swap();
         }
       }
@@ -255,6 +300,10 @@ export class Fluid {
     gl.uniform1i(p.display.u.uDye, this.dye.read.attach(0));
     gl.uniform3fv(p.display.u.uCoffee, o.coffee); gl.uniform3fv(p.display.u.uMilk, o.milk); gl.uniform3fv(p.display.u.uEdge, o.edge);
     gl.uniform1f(p.display.u.uTarget, showTarget); gl.uniform4f(p.display.u.uTargetEll, ell[0], ell[1], ell[2], ell[3]);
+    gl.uniform1f(p.display.u.uPixel, this.pixelOut ? 1 : 0); gl.uniform1f(p.display.u.uOut, this.pixelOut || 1);
+    gl.uniform1f(p.display.u.uLayerLine, o.layerLine); gl.uniform3fv(p.display.u.uCrema, o.crema);
     this.blit(null);
   }
+  // Pixel mode for the 3D view: render the surface at n x n into this canvas (read back as a texture by three.js).
+  setPixelOut(n){ this.pixelOut = n || 0; }
 }

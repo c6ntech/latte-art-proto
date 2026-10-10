@@ -7,21 +7,21 @@
 | 層 | 項目 | 用途 | 現況 | 下一步 / 誰 |
 |---|---|---|---|---|
 | 遊戲 | 靜態網頁：ES modules、WebGL2、Canvas 2D、Web Audio | 整個遊戲，沒有建置步驟 | 就緒 | — |
-| 遊戲 | three.js | 3D-lite 呈現（`Docs/ART_DIRECTION.md`） | 未導入 | A0 時從 cdnjs 載入，鎖版本 |
+| 遊戲 | three.js r170 | 3D 呈現（D007），放在 `vendor/`，檔名帶版本 | 就緒 | — |
 | 部署 | `gh` + GitHub Pages | 推 main 約 60 秒上線 | 就緒 | — |
 | 本機測試 | gstack `browse`（headed） | 跑完整流程、截圖、抓 console | 就緒 | headless 沒有 WebGL2 |
 | 本機測試 | `tools/sim.sh` | 一鍵流程 + 定時截圖 + 印比例 | 就緒 | — |
 | 本機測試 | `tools/contact_sheet.py` | 多張截圖合成一張，給 Reviewer | 就緒 | — |
 | 本機測試 | `tools/check_env.py` | 全部工具的健康檢查 | 就緒 | — |
-| 本機測試 | `tools/stamp.sh` | 寫入版本號 | 未做 | T001 |
+| 本機測試 | `tools/stamp.sh` | 寫入版本號與 import map（破 Pages 的 10 分鐘快取） | 就緒 | 每次部署前跑 |
 | 手機 | adb（Android Studio 內建） | Pixel 9a 截圖、logcat、Chrome 遠端偵錯看 console 與 fps | 有，沒接手機 | **你**：開 USB 偵錯、接線 |
 | 手機 | Safari Web Inspector | iPhone 15 Pro 看 console 與效能 | 未開 | **你**：iPhone 設定 › Safari › 進階 › 網頁檢閱器 |
 | 手機 | 遊戲內數據匯出 + `?replay=` | 手感數據回流 | 未做 | T002、T003 |
 | Claude 連接器 | Figma | `generate_image` 生圖（扣 Figma AI 點數）；Weave 模型庫 | 已連；Weave 未連結 | **你**：到 app.weavy.ai 設定裡連結 Figma 帳號，我才查得到有哪些模型（含是否有圖轉 3D） |
 | Claude 連接器 | Google Drive | 你放參考照、手機錄影給我 | 已連 | — |
 | Claude 連接器 | Claude Docs | 計畫文件要分享給別人時用 | 已連 | — |
-| MCP（本機） | fal.ai MCP | 生圖、圖轉 3D、Patina 材質、音效 | 範本在 `.mcp.json.example` | **你**：給 `FAL_KEY` 與預算上限 |
-| MCP（本機） | Blender MCP（`uvx blender-mcp`） | 手部模型減面、UV、烘焙、glTF 匯出、造型縮圖與黑剪影 | uvx 有，Blender 沒裝 | **你**：同意我 `brew install --cask blender`，或自己裝 |
+| MCP（本機） | fal.ai MCP | 生圖、圖轉 3D、Patina 材質、音效 | 範本在 `.mcp.json.example` | 之後需要時（D008）：給 `FAL_KEY` 與預算上限 |
+| MCP（本機） | Blender MCP（`uvx blender-mcp`） | 手部模型減面、UV、烘焙、glTF 匯出、造型縮圖與黑剪影 | uvx 有，Blender 沒裝 | 之後需要時（D008）：複雜物件才用 |
 | MCP（本機） | Chrome DevTools MCP | 效能追蹤；透過 adb 轉接可能可接 Pixel 的 Chrome | 未裝 | 接上 Pixel 後我驗證可不可行 |
 | MCP（plugin） | context7 | 查 three.js 等文件 | 已裝 | — |
 | Hooks（專案） | SessionStart 重新定位 | 新 session 自動印 STATE、TODO、git | 就緒，已測 | — |

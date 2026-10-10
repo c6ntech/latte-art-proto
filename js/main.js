@@ -5,6 +5,8 @@ import { Scene } from './scene.js';
 import { SteamSound } from './audio.js';
 import { samplePattern } from './pattern.js';
 import tulip from './patterns/tulip.js';
+import { Scene3D } from './scene3d.js';
+import { VERSION } from './version.js';
 
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -25,16 +27,18 @@ function handTilt(tNow, dt, err){
 let lastErr = null;
 
 // ---------- 設定（可開關） ----------
-const settings = { showTarget: true, invertY: false, debug: false, maxDeg: TUNING.tilt.maxDeg };
+const settings = { showTarget: true, invertY: false, debug: false, maxDeg: TUNING.tilt.maxDeg, view: '3d' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('latte.settings.v2')||'{}')); } catch(e){}
 function saveSettings(){ try{ localStorage.setItem('latte.settings.v2', JSON.stringify(settings)); }catch(e){} }
+if(params.get('view') === '2d' || params.get('view') === '3d') settings.view = params.get('view');
+let VIEW3D = settings.view !== '2d';
 
 // ---------- 物件 ----------
 const pattern = tulip;
 const tilt = new Tilt({ minCutoff: TUNING.tilt.filterMinCutoff, beta: TUNING.tilt.filterBeta, deadZone: TUNING.tilt.deadZone });
 const scene = new Scene($('fg'));
 const sound = new SteamSound();
-let fluid = null;
+let fluid = null, scene3d = null;
 const glCanvas = $('cup');
 const cup = { x:0, y:0, R:100, scale:1, vx:0, vy:0, ax:0, ay:0 };
 const home = { x:0, y:0 };
@@ -43,6 +47,7 @@ let t = 0, lastTs = 0, sinceStart = 0;
 let score = null, prevRel = null, prevCup = null, tipFrames = 0;
 let steam = { held:false, progress:0 };
 let drift = [0,0,0,0,0,0];
+let layerIdx = -1, wasPouring = false;   // each new pour burst is its own foam layer
 let fps = 0, fpsN = 0, fpsT = 0;
 
 function layout(){
@@ -50,10 +55,18 @@ function layout(){
   const w = scene.w, h = scene.h;
   cup.R = TUNING.view.cupRadiusFrac * Math.min(w, h*0.62);
   home.x = w/2; home.y = h*TUNING.view.cupCenterY;
-  const dpr = Math.min(2, window.devicePixelRatio||1);
-  const px = Math.round(cup.R*2);
-  glCanvas.style.width = px+'px'; glCanvas.style.height = px+'px';
-  glCanvas.width = Math.round(px*dpr); glCanvas.height = Math.round(px*dpr);
+  if(VIEW3D){
+    // the fluid canvas becomes a small offscreen texture source for the 3D liquid surface
+    const n = TUNING.view3d.latteTexels;
+    glCanvas.width = n; glCanvas.height = n; glCanvas.style.display = 'none'; $('fg').style.display = 'none';
+    if(scene3d) scene3d.resize();
+  } else {
+    const dpr = Math.min(2, window.devicePixelRatio||1);
+    const px = Math.round(cup.R*2);
+    glCanvas.style.width = px+'px'; glCanvas.style.height = px+'px';
+    glCanvas.width = Math.round(px*dpr); glCanvas.height = Math.round(px*dpr);
+    $('view3d').style.display = 'none';
+  }
   if(state==='intro' || state==='calib' || state==='steam' || state==='ready'){ cup.x = home.x; cup.y = home.y; }
 }
 window.addEventListener('resize', layout);
@@ -61,6 +74,7 @@ window.addEventListener('resize', layout);
 function initFluid(){
   try {
     fluid = new Fluid(glCanvas, Object.assign({}, TUNING.sim, { cupShape: LEVEL.cupShape, velDissipation: TUNING.sim.velDissipation*LEVEL.viscosity }));
+    if(VIEW3D) fluid.setPixelOut(TUNING.view3d.latteTexels);
     return true;
   } catch(e){ $('gl-error').hidden = false; $('gl-error').textContent = '這個瀏覽器無法啟動 WebGL2 流體（'+e.message+'）。'; console.error(e); return false; }
 }
@@ -102,6 +116,8 @@ for(const id of ['set-target','set-invert','set-debug']){
   el.checked = settings[key]; el.addEventListener('change', () => { settings[key] = el.checked; saveSettings(); $('debug').hidden = !settings.debug; });
 }
 $('set-deg').value = String(settings.maxDeg); $('set-deg').addEventListener('change', e => { settings.maxDeg = +e.target.value; saveSettings(); });
+$('set-view').value = VIEW3D ? '3d' : '2d'; $('set-view').addEventListener('change', e => { settings.view = e.target.value; saveSettings(); location.reload(); });
+$('build').textContent = `v${VERSION} · ${VIEW3D ? '3D' : '2D'}`;
 $('debug').hidden = !settings.debug;
 for(const b of document.querySelectorAll('.btn-settings')) b.addEventListener('click', () => { $('settings').hidden = !$('settings').hidden; });
 $('btn-close-settings').addEventListener('click', () => { $('settings').hidden = true; });
@@ -112,6 +128,7 @@ function startPour(){
   fluid.reset(); t = 0; sinceStart = 0; prevRel = null; prevCup = null; tipFrames = 0;
   score = { inTime:0, pourTime:0, samples:[], spilled:false };
   drift = drift.map(() => Math.random()*Math.PI*2);
+  layerIdx = -1; wasPouring = false;
   cup.scale = 1; steam.progress = 0; $('steam-done').hidden = true;
   setState('pour');
 }
@@ -134,6 +151,7 @@ function cupFromTilt(dt){
   if(prevCup){ const vx = (tx-prevCup.x)/dt, vy = (ty-prevCup.y)/dt; cup.ax = (vx-cup.vx)/dt; cup.ay = (vy-cup.vy)/dt; cup.vx=vx; cup.vy=vy; }
   prevCup = { x:tx, y:ty };
   cup.x = tx; cup.y = ty;
+  cup.tiltX = r.x; cup.tiltY = settings.invertY ? -r.y : r.y;   // phone angle, for the 3D cup tilt only
   return r;
 }
 function checkTip(r){
@@ -169,7 +187,7 @@ function frame(ts){
     const px = home.x + (s.x+nx)*cup.R, py = home.y + (s.y+ny)*cup.R;
     let r;
     if(DEV.hand){ tilt.mock = handTilt(sinceStart, dt, lastErr); }
-    if(DEV.auto){ cup.x = home.x + s.x*cup.R; cup.y = home.y; r = {rawX:0,rawY:0}; if(prevCup){ cup.vx=(cup.x-prevCup.x)/dt; } prevCup={x:cup.x,y:cup.y}; }
+    if(DEV.auto){ cup.x = home.x + s.x*cup.R; cup.y = home.y; cup.tiltX = cup.tiltY = 0; r = {rawX:0,rawY:0}; if(prevCup){ cup.vx=(cup.x-prevCup.x)/dt; } prevCup={x:cup.x,y:cup.y}; }
     else r = cupFromTilt(dt);
     pitcher = { x:px, y:py, flow:s.flow*LEVEL.flowRate, h:s.h, prep:s.prep, prepDir:s.prepDir };
     if(!DEV.auto && checkTip(r)){ score.spilled = true; endPour(); }
@@ -204,9 +222,11 @@ function frame(ts){
           dyeR *= 1 + (P.fuzzDyeScale-1)*fuzz; amount *= 1 - (1-P.fuzzAmount)*fuzz; push *= 1 - (1-P.fuzzPush)*fuzz;
         }
         const clampV = Math.min(1.2, Math.hypot(vx,vy)); const L = Math.hypot(vx,vy)||1; vx = vx/L*clampV; vy = vy/L*clampV;
-        fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount);
+        if(!wasPouring) layerIdx++;
+        fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount, P.layerIds[layerIdx % P.layerIds.length]);
         fluid.setPush(u, v, P.pushSigma, push, P.pushR0);
       } else fluid.setPush(u, v, P.pushSigma, 0, P.pushR0);
+      wasPouring = pouring;
       // 杯子加速度 → 液面晃動
       const sl = P.slosh*(1 + 2*LEVEL.cupDisturbance);
       const fx = -cup.ax/cup.R*0.5*sl, fy = cup.ay/cup.R*0.5*sl;
@@ -219,16 +239,23 @@ function frame(ts){
   if(state==='reveal'){
     // 揭曉：杯子滑回中間、放大
     const k = 1 - Math.pow(0.001, dt);
-    cup.x += (home.x - cup.x)*k; cup.y += (home.y*0.72 - cup.y)*k; cup.scale += (1.28 - cup.scale)*k;
+    if(VIEW3D){ cup.x += (home.x - cup.x)*k; cup.y += (home.y - cup.y)*k; }   // the 3D camera moves in instead
+    else { cup.x += (home.x - cup.x)*k; cup.y += (home.y*0.72 - cup.y)*k; cup.scale += (1.28 - cup.scale)*k; }
     cup.ax = cup.ay = 0;
   }
   if(state==='ready'){ pitcher = { x: home.x + 0.0*cup.R, y: home.y - 0.25*cup.R, flow:0, h:0.9, prep:0, prepDir:[0,0] }; }
 
   // 繪製
-  glCanvas.style.transform = `translate(${cup.x-cup.R}px, ${cup.y-cup.R}px) scale(${cup.scale})`;
-  if(fluid) fluid.render(settings.showTarget && state==='pour' ? (insideNow ? 1.6 : 0.9) : 0, targetEll());
-  scene.clear();
-  scene.draw(cup, pitcher, { showPitcher: !!pitcher, time, outside });
+  const targetLevel = settings.showTarget && state==='pour' ? (insideNow ? 1.6 : 0.9) : 0;
+  if(scene3d){
+    if(fluid) fluid.render(targetLevel, targetEll());   // into the small canvas; read by three.js in the same frame
+    scene3d.render({ cup, home, pitcher, state, dt, outside });
+  } else {
+    glCanvas.style.transform = `translate(${cup.x-cup.R}px, ${cup.y-cup.R}px) scale(${cup.scale})`;
+    if(fluid) fluid.render(targetLevel, targetEll());
+    scene.clear();
+    scene.draw(cup, pitcher, { showPitcher: !!pitcher, time, outside });
+  }
 
   if(settings.debug){
     const r = tilt.mock ? tilt.read() : { rawX: tilt.raw.gamma - tilt.zero.gamma, rawY: tilt.raw.beta - tilt.zero.beta };
@@ -265,6 +292,12 @@ function drawTimeline(samples, spilled){
 const bootT = performance.now();
 layout();
 if(!initFluid()){ /* 錯誤已顯示 */ }
+if(VIEW3D && fluid){
+  try { scene3d = new Scene3D($('view3d'), glCanvas); }
+  catch(e){ console.error(e); VIEW3D = false; fluid.setPixelOut(0); glCanvas.style.display = ''; $('fg').style.display = ''; $('build').textContent = `v${VERSION} · 2D（3D 啟動失敗）`; }
+  layout();
+}
+window.__latte = { get scene3d(){ return scene3d; }, get fps(){ return fps; } };   // dev probe for tools/sim.sh
 if(DEV.auto || DEV.hand){ tilt.mock = {x:0,y:0}; }
 setState('intro');
 requestAnimationFrame(frame);
