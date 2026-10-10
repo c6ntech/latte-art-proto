@@ -1,0 +1,24 @@
+{
+ "tag": "hand_b2",
+ "query": "hand=1&guide=0",
+ "version": "v1010-1538 · 3D",
+ "result": "牛奶落在甜蜜點的時間：77%（門檻 80%） | 沒接好",
+ "metrics": {
+  "coverage": 0.1056644880174292,
+  "width": 0.5138888888888888,
+  "height": 0.5972222222222222,
+  "offset": 0.3210163117683205,
+  "symmetry": 0.13450292397660818,
+  "leaves": 5.0,
+  "match": 0.13470471134704712
+ },
+ "target": {
+  "coverage": 0.3600217864923747,
+  "width": 0.6805555555555556,
+  "height": 0.6666666666666666,
+  "offset": 0.011219763258401582,
+  "symmetry": 0.4416575790621592,
+  "leaves": 3.0
+ },
+ "summary": "hand_b2: 牛奶落在甜蜜點的時間：77%（門檻 80%） | 沒接好 · match 0.13 · coverage 0.11 (target 0.36) · width 0.51 (target 0.68) · height 0.60 (target 0.67) · symmetry 0.13 (target 0.44) · offset 0.32 (target 0.01) · leaves 5.00 (target 3.00)"
+}

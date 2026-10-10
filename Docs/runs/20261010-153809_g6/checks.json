@@ -1,0 +1,24 @@
+{
+ "tag": "g6",
+ "query": "auto=1",
+ "version": "v1010-1538 · 3D",
+ "result": "牛奶落在甜蜜點的時間：100%（門檻 80%） | 成功",
+ "metrics": {
+  "coverage": 0.3619281045751634,
+  "width": 0.6805555555555556,
+  "height": 0.6805555555555556,
+  "offset": 0.014504851187619417,
+  "symmetry": 0.44613710554951036,
+  "leaves": 3.0,
+  "match": 0.9947328818660647
+ },
+ "target": {
+  "coverage": 0.3600217864923747,
+  "width": 0.6805555555555556,
+  "height": 0.6666666666666666,
+  "offset": 0.011219763258401582,
+  "symmetry": 0.4416575790621592,
+  "leaves": 3.0
+ },
+ "summary": "g6: 牛奶落在甜蜜點的時間：100%（門檻 80%） | 成功 · match 0.99 · coverage 0.36 (target 0.36) · width 0.68 (target 0.68) · height 0.68 (target 0.67) · symmetry 0.45 (target 0.44) · offset 0.01 (target 0.01) · leaves 3.00 (target 3.00)"
+}

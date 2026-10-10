@@ -1,5 +1,5 @@
 # DECISIONS（只增不改；一筆 6 行以內；用 grep 找）
-# 格式：## D### · 日期 · 標題 / 為什麼 / 否決了 / 影響
+# 格式：## D### · 日期 · 標題 / 為什麼 / 否決了 / 影響 / 取代（被取代的舊決定要寫，grep 得到哪些已失效）
 
 ## D001 · 2026-10-08 · 鋼杯與手固定不動，難度在杯子本身難平衡
 為什麼：owner：「拉花的手、位置不應該跳來跳去，而是固定在一個地方，是杯子很難平衡，需要用手機陀螺儀去接的感覺。」
@@ -65,3 +65,17 @@
 做法：`art/blender/build_assets.py`（背景 Blender 腳本，可重跑）產生 `assets/models/*.glb`、`art/textures/*.png`、`art/previews/*.png`、可編輯 `.blend`；
 遊戲載入 GLB 取代程式版，載入失敗時保留程式版（`?assets=0` 強制程式版）。風格規則不變（STYLE_BIBLE：低面數、像素貼圖、最近鄰）。Blender MCP 已裝供互動調整。
 取代：D008。影響：`js/scene3d.js`（loadAssets）、`tools/stamp.sh`（import map 加 three）、Docs/TOOLS.md、ART_DIRECTION.md。
+
+## D014 · 2026-10-10 · 導引式模擬：拉花往 owner 照片做的目標圖收斂，出界那段照樣真的糊
+為什麼：owner 選 KIT_ADOPTION Q1 的 A。純模擬六輪做不到照片等級（形狀相似度 0.15）。
+做法：`tools/make_target.py` 把照片展平成 72 格目標；染料第三、四通道記「倒的品質」（出界 = 0、黏著不洗掉）與「有沒有浮上來」；
+只在附近全是好品質、已浮出的奶的地方往目標拉；拉的範圍跟著倒的進度往遠側推進（曲線前緣），拉穿開始後全開。
+結果：完美 0.99、手持 0.4–0.75、壞的 0.47（相似度）。`?guide=0` 回到舊行為。取代：D011 的「純模擬求葉形」。
+
+## D015 · 2026-10-10 · 採用 KIT_ADOPTION 全部建議（Q1–Q16）
+為什麼：owner：「all as recommended」。Q12 的自動記憶維持開啟（建議是 owner 決定，未指定）。Q10 fal 金鑰未給，生圖暫停。
+影響：PLAN v3、CLAUDE.md §9、TOOLS.md、STYLE_BIBLE、ACCEPTANCE.json、tools/、hooks、settings。
+
+## D016 · 2026-10-10 · 葉子的時間改用真實倒奶影片量到的數字
+為什麼：KIT_ADOPTION Q2；`knowledge/latte-rosetta-technique.md` 量到每秒 3.4 次搖晃、拉穿約 0.8 秒、注入流量約搖晃的一半。
+做法：每半次 0.16 秒、收尾幅度 0.05R、拉穿 0.8 秒、注入流量 0.5。前後距離維持在現有甜蜜點內；照影片的完整距離需要改判定，留給 owner。

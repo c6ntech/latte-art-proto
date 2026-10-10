@@ -53,9 +53,12 @@ export const TUNING = {
     tiltIdle: 0.35, tiltPour: 0.7,   // 鋼杯傾倒角（弧度）
     spoutHeight: 0.55, spoutHeightH: 1.1, spoutBack: [0.15, -0.4],   // 壺嘴相對落點：高度、往遠側偏移（x, z）
     tableRepeat: 18,
+    swingYaw: 0.35, swingMax: 0.35,  // 搖晃時壺身跟著轉（弧度 / 每秒 R）與上限，只影響畫面（K02）
     grain: 1.6,                      // 所有程式貼圖的雜訊強度倍率（Reviewer r2：手機尺寸下顆粒太淡）
     sun: 2.1, ambient: 0.9, exposure: 1.0, background: 0x2a1d14
   },
+  // 導引式模擬（D014）：已經倒過、品質好的奶附近，往圖案目標拉。strength 每秒收斂速度、covR 鄰近範圍（UV）、covT 有奶的門檻
+  guide: { strength: 5, covR: 0.1, covT: 0.06 },
   prepLead: 0.35, // 預備動作提前秒數
   prepMinMove: 0.25, // 位移超過這個距離（R）才做預備動作
   prepMinDur: 0.4    // 而且這段移動要超過這麼久（秒），快速的手腕搖晃不做

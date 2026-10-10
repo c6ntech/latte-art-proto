@@ -1,4 +1,8 @@
 {
+  "promptCacheTtl": "1h",
+  "env": {
+    "MAX_MCP_OUTPUT_TOKENS": "10000"
+  },
   "hooks": {
     "SessionStart": [
       {

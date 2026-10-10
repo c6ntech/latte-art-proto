@@ -248,6 +248,13 @@ export class Scene3D {
       tryLoad('table', s => { this.tableProc.visible = false; s.traverse(o => { if(o.isMesh) o.castShadow = false; }); this.scene.add(s); }),
       tryLoad('cup', s => { for(const c of this.cupBody.children) c.visible = false; this.cupBody.add(s); }),
       tryLoad('pitcher', s => {
+        const j = n => s.getObjectByName(n);
+        const joints = { grip: j('grip'), thumb: j('thumb'), wrist: j('wrist'), fingers: [0, 1, 2, 3].map(i => j('finger_' + i)).filter(Boolean) };
+        if(joints.grip){
+          this.joints = joints; this.jointRest = new Map();
+          for(const o of [joints.grip, joints.thumb, joints.wrist, ...joints.fingers]) if(o) this.jointRest.set(o, { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() });
+          if(this.pose) this.applyPose(this.pose);
+        }
         const tip = s.getObjectByName('spout_tip');
         if(tip) this.spoutLocal = new THREE.Vector3().setFromMatrixPosition(tip.matrixWorld);
         for(const c of this.pitcherProc) c.visible = false;
@@ -255,6 +262,23 @@ export class Scene3D {
       }),
       tryLoad('customer_hand', s => { s.visible = false; this.customerHand = s; this.scene.add(s); })   // for the transitions (not wired yet)
     ]);
+  }
+
+  // Hand pose (KIT_ADOPTION Q8): degrees per joint, offsets in pitcher units. The owner sets these with ?pose=1;
+  // the chosen pose is committed to assets/poses/hand.json and applied on every load.
+  setPose(p){ this.pose = Object.assign({ fingerCurl: 0, thumbSwing: 0, thumbLift: 0, wristPitch: 0, wristYaw: 0, handRoll: 0, gripY: 0, scale: 1 }, p); if(this.joints) this.applyPose(this.pose); }
+  applyPose(p){
+    const D = THREE.MathUtils.degToRad, J = this.joints, rest = this.jointRest;
+    const set = (o, e, dp, sc) => {
+      if(!o) return; const r = rest.get(o);
+      o.position.copy(r.p); if(dp) o.position.add(dp);
+      o.quaternion.copy(r.q).multiply(new THREE.Quaternion().setFromEuler(e));
+      o.scale.copy(r.s); if(sc) o.scale.multiplyScalar(sc);
+    };
+    set(J.grip, new THREE.Euler(0, D(p.handRoll), 0), new THREE.Vector3(0, p.gripY, 0), p.scale);
+    for(const f of J.fingers) set(f, new THREE.Euler(0, D(p.fingerCurl), 0));
+    set(J.thumb, new THREE.Euler(0, D(p.thumbSwing), D(p.thumbLift)));
+    set(J.wrist, new THREE.Euler(0, D(p.wristYaw), D(p.wristPitch)));
   }
 
   resize(){
@@ -295,7 +319,13 @@ export class Scene3D {
       flow = P.flow; h = P.h; prep = P.prep || 0; prepDir = P.prepDir || [0,0];
     }
     const back = prep ? Math.sin(prep*Math.PI) : 0;
-    this.pitcherRoot.rotation.y = v.pitcherYaw;
+    // K02: the jug body swings with the wrist wiggle so the motion reads from above; the spout is re-solved onto the stream below
+    const lx = P ? (P.x - g.home.x)/R : 0;
+    const vxw = this.lastLx === undefined ? 0 : (lx - this.lastLx)/Math.max(dt, 1e-3);
+    this.lastLx = lx;
+    this.swing = (this.swing || 0) + (THREE.MathUtils.clamp(vxw*v.swingYaw, -v.swingMax, v.swingMax) - (this.swing || 0))*(1 - Math.exp(-12*dt));
+    this.pitcherRoot.rotation.y = v.pitcherYaw + this.swing;
+    this.pitcherTilt.rotation.x = this.swing*0.6;
     this.pitcherTilt.rotation.z = -(v.tiltIdle + v.tiltPour*flow*(1 - 0.4*h) - 0.15*back);
     this.pitcherRoot.position.set(0, 0, 0); this.pitcherRoot.updateMatrixWorld(true);
     const tip = this.pitcherTilt.localToWorld(this.spoutLocal.clone());
@@ -353,6 +383,12 @@ export class Scene3D {
       v.lookAt[0]*(1-e) + cx*e,
       v.lookAt[1]*(1-e) + surfY*e,
       v.lookAt[2]*(1-e) + (cz + v.revealShift)*e);   // shift so the cup sits above the result card
+    if(this.closeUp && this.joints){   // pose tool: close-up on the hand
+      this.joints.grip.getWorldPosition(target);
+      const cp = THREE.MathUtils.degToRad(55), cd = 5;
+      this.camera.position.set(target.x + 1.2, target.y + Math.sin(cp)*cd, target.z + Math.cos(cp)*cd);
+      this.camera.lookAt(target); this.time += dt; this.renderer.render(this.scene, this.camera); return;
+    }
     this.camera.position.set(target.x, target.y + Math.sin(pitch)*dist, target.z + Math.cos(pitch)*dist);
     this.camera.lookAt(target);
 

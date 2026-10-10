@@ -27,10 +27,17 @@
 - 參數全部放 `js/config.js`，程式裡沒有魔術數字。調參改 config，不改邏輯。
 - 同一件事調參三輪還不動，就是模型錯了，換模型（例：奶泡分層靠高斯推開調不出來，換成 1/r 才分層）。
 
+## 3.5 品質規則（KIT_ADOPTION Q3–Q6）
+
+- 宣稱「圖案變好」前要有數字：`tools/shot.sh` 的 checks.json（形狀相似度等）＋ `latte-review` 新評審。
+- 關鍵時刻（葉子成形、揭曉、出界糊掉、打奶泡、翻倒）每個至少三輪「固定截圖 → 新評審 → 修最糟一個」。
+- 葉子達標（評審平均 ≥ 7、無硬性不合格）後凍結流體與導引設定；之後新圖案只寫資料與目標圖。實驗放另一個 pattern 檔或網址參數，核准才換預設。
+- sim 不過或 console 有錯的版本不推給 owner；推了才發現就立刻退回上一版。
+
 ## 4. 你不自己評分
 
 - 圖案好不好看：開一個新 context 的 Reviewer 子代理，拿截圖對照 `Docs/concepts/approved/` 的真實拉花照片打分、列三個最糟缺點。你自己看圖只是確認「有沒有壞掉」。
-- 手感好不好、難不難：只有 owner 的手機能判斷。狀態用詞：*implemented*、*agent-verified*（模擬或 Reviewer 驗過）、*pending owner*（任何手感與視覺項目的預設）。不要寫「owner 已接受」。
+- 手感好不好、難不難：只有 owner 的手機能判斷。狀態用詞：*implemented*、*exported*（素材檔驗過）、*integrated*（已進遊戲）、*agent-verified*（模擬或 Reviewer 驗過）、*pending owner*（任何手感與視覺項目的預設）。不要寫「owner 已接受」。
 - 數字來自工具（`tools/sim.sh` 的輸出、手機回傳的 JSON），不手算、不估。
 
 ## 5. 編輯與驗證的紀律

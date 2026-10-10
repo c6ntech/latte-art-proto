@@ -67,7 +67,7 @@ void main(){
   frag = mix(res, res*cupMask(vUv), uMask); }`,
 
   // Dye is RG: R = milk amount, G = which pour (layer id) the milk came from, mass-weighted where pours mix.
-  splat: HEAD + `uniform sampler2D uTarget; uniform vec2 uPoint; uniform vec3 uColor; uniform float uRadius, uMode, uLayer;
+  splat: HEAD + `uniform sampler2D uTarget; uniform vec2 uPoint; uniform vec3 uColor; uniform float uRadius, uMode, uLayer, uQuality, uSurf;
 void main(){ vec2 p=vUv-uPoint; float s=exp(-dot(p,p)/uRadius); vec3 base=texture(uTarget,vUv).xyz;
   if(uMode>0.5){
     float add = s*uColor.x, r0 = base.x;
@@ -75,13 +75,42 @@ void main(){ vec2 p=vUv-uPoint; float s=exp(-dot(p,p)/uRadius); vec3 base=textur
     // only the faint tail of the splat blends, by mass
     float own = smoothstep(0.15, 0.5, s);
     float g = mix((base.y*r0 + uLayer*add) / max(r0 + add, 1e-4), uLayer, own);
-    frag = vec4(min(r0 + add, 1.0), g, 0.0, 1.0); return;
+    // B: pour quality, sticky: once off-target milk lands somewhere, later good milk does not clean that spot
+    float q = r0 < 0.05 ? uQuality : min(base.z, uQuality);
+    float sf = (texture(uTarget, vUv).w*r0 + uSurf*add) / max(r0 + add, 1e-4);   // A: how much of this milk surfaced (high pour sinks)
+    frag = vec4(min(r0 + add, 1.0), g, q, sf); return;
   }
   vec3 v = (base + s*uColor) * cupMask(vUv);
   frag=vec4(v,1.0); }`,
 
   force: HEAD + `uniform sampler2D uVel; uniform vec2 uForce; uniform float uDt;
 void main(){ frag=vec4((texture(uVel,vUv).xy + uForce*uDt)*cupMask(vUv),0.0,1.0); }`,
+
+  // Guided simulation (D014): where milk of good pour quality is present nearby, pull the milk amount toward
+  // the pattern target (white leaves, coffee lines). Off-target (low-quality) milk is left alone, so smears stay real.
+  // cov: surfaced milk nearby (sunk milk from the high fill pour does not count).
+  // q: the WORST pour quality of any milk nearby, so one off-target deposit blocks guidance around it and the smear stays.
+  guide: HEAD + `uniform sampler2D uDye, uGoal; uniform float uK, uCovR, uCovT, uFront, uMargin;
+void main(){
+  vec4 d = texture(uDye, vUv);
+  float cov = d.x*d.w, q = d.x > 0.15 ? d.z : 1.0;
+  for(int i = 0; i < 8; i++){
+    float a = float(i) * 0.785398;
+    for(int j = 1; j <= 2; j++){
+      vec4 t = texture(uDye, vUv + vec2(cos(a), sin(a)) * uCovR * float(j) * 0.5);
+      cov = max(cov, t.x*t.w);
+      if(t.x > 0.15) q = min(q, t.z);
+    }
+  }
+  float w = smoothstep(uCovT, uCovT + 0.2, cov) * step(0.95, q) * cupMask(vUv);   // hard gate: only spotless milk is guided
+  float fr = uFront - 0.12 * pow((vUv.x - 0.5) / 0.35, 2.0);   // curved front: the middle leads, the sides lag (leaf arcs)
+  w *= 1.0 - smoothstep(fr - 0.03, fr + uMargin, vUv.y);         // progressive: only behind the furthest point the pour has reached
+  float goal = texture(uGoal, vUv).r;
+  float k = uK * w;
+  d.x = mix(d.x, goal, k);
+  d.z = mix(d.z, 1.0, k);           // milk placed by guidance is good-quality, surfaced milk
+  d.w = mix(d.w, 1.0, k);
+  frag = d; }`,
 
   display: HEAD + `uniform sampler2D uDye; uniform vec3 uCoffee, uMilk, uEdge; uniform float uTarget; uniform vec4 uTargetEll; uniform vec2 uTexel;
 uniform float uPixel, uOut, uLayerLine; uniform vec3 uCrema;
@@ -214,6 +243,7 @@ export class Fluid {
     const type = gl.HALF_FLOAT;
     this.fmtR = pickFormat(gl, gl.R16F, gl.RED, type);
     this.fmtRG = pickFormat(gl, gl.RG16F, gl.RG, type);
+    this.fmtRGBA = pickFormat(gl, gl.RGBA16F, gl.RGBA, type);
     if(!this.fmtR || !this.fmtRG) throw new Error('no-float-format');
     this.type = type;
 
@@ -233,7 +263,7 @@ export class Fluid {
   initFBOs(){
     const gl=this.gl, o=this.opts, s=o.simRes, d=o.dyeRes;
     this.velocity = createDouble(gl, s, s, this.fmtRG, this.type, gl.LINEAR);
-    this.dye = createDouble(gl, d, d, this.fmtRG, this.type, gl.LINEAR);
+    this.dye = createDouble(gl, d, d, this.fmtRGBA, this.type, gl.LINEAR);   // R milk, G layer id, B pour quality
     this.divergence = createFBO(gl, s, s, this.fmtR, this.type, gl.NEAREST);
     this.curl = createFBO(gl, s, s, this.fmtR, this.type, gl.NEAREST);
     this.pressure = createDouble(gl, s, s, this.fmtR, this.type, gl.NEAREST);
@@ -253,7 +283,21 @@ export class Fluid {
   }
   // x,y in UV (0..1). vx,vy velocity in UV/s. dyeR / velR are gaussian sigma in UV. amount: dye per call.
   // layer: id of the current pour (0..1); each new pour gets a distinct value so its boundary with older milk shows
-  splat(x, y, vx, vy, velR, dyeR, amount, layer=0.5){ this.pendingSplats.push({x,y,vx,vy,velR,dyeR,amount,layer}); }
+  splat(x, y, vx, vy, velR, dyeR, amount, layer=0.5, quality=1, surf=1){ this.pendingSplats.push({x,y,vx,vy,velR,dyeR,amount,layer,quality,surf}); }
+  // Pattern target for the guided simulation: an image (white = milk), far side up. strength 0 turns guidance off.
+  setGoalFront(v){ this.goalFront = v; }   // UV v of the furthest point the surfacing pour has reached
+  setGoal(img, strength, covR, covT){
+    const gl = this.gl;
+    if(!this.goalTex){ this.goalTex = gl.createTexture(); }
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.goalTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.goal = { strength, covR, covT, margin: 0.12 };
+    this.goalFront = 2.0;
+  }
   setPush(x, y, sigma, strength, r0){ this.push.x=x; this.push.y=y; this.push.r=sigma*sigma; this.push.str=strength; this.push.r0=r0||0.03; }
   // conveyor ahead of the pour point: fwd = unit direction in UV, strength in UV/s, w = half width, l = reach
   setConveyor(fx, fy, strength, w, l){ this.conv = { fx, fy, s: strength, w, l }; }
@@ -287,7 +331,7 @@ export class Fluid {
           gl.uniform2fv(p.splat.u.uTexel, this.dye.texel);
           gl.uniform1i(p.splat.u.uTarget, this.dye.read.attach(0));
           gl.uniform3f(p.splat.u.uColor, s.amount, 0, 0); gl.uniform1f(p.splat.u.uRadius, s.dyeR*s.dyeR); gl.uniform1f(p.splat.u.uMode, 1);
-          gl.uniform1f(p.splat.u.uLayer, s.layer);
+          gl.uniform1f(p.splat.u.uLayer, s.layer); gl.uniform1f(p.splat.u.uQuality, s.quality); gl.uniform1f(p.splat.u.uSurf, s.surf);
           this.blit(this.dye.write); this.dye.swap();
         }
       }
@@ -316,6 +360,14 @@ export class Fluid {
     const cv = this.conv || { fx:0, fy:-1, s:0, w:0.1, l:0.3 };
     gl.uniform2f(p.advect.u.uFwd, cv.fx, cv.fy); gl.uniform1f(p.advect.u.uConv, cv.s); gl.uniform1f(p.advect.u.uConvW, cv.w); gl.uniform1f(p.advect.u.uConvL, cv.l);
     this.blit(this.dye.write); this.dye.swap();
+    if(this.goal && this.goal.strength > 0){
+      p.guide.use(); gl.uniform2fv(p.guide.u.uTexel, this.dye.texel); gl.uniform2fv(p.guide.u.uCupShape, shape);
+      gl.uniform1i(p.guide.u.uDye, this.dye.read.attach(0));
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.goalTex); gl.uniform1i(p.guide.u.uGoal, 1);
+      gl.uniform1f(p.guide.u.uK, 1 - Math.exp(-this.goal.strength*dt)); gl.uniform1f(p.guide.u.uCovR, this.goal.covR); gl.uniform1f(p.guide.u.uCovT, this.goal.covT);
+      gl.uniform1f(p.guide.u.uFront, this.goalFront ?? 2.0); gl.uniform1f(p.guide.u.uMargin, this.goal.margin ?? 0.08);
+      this.blit(this.dye.write); this.dye.swap();
+    }
   }
   render(showTarget, ell){
     const gl=this.gl, o=this.opts, p=this.p; gl.bindVertexArray(this.vao);

@@ -69,6 +69,35 @@ def hand_parts(skin, cuff, sleeve, parent, origin, scale, mirror_y=False):
     lib.mesh_obj("hand_sleeve", lib.prism(0.2 * s, 0.27 * s, 3.4 * s, 6, P(-0.52, 0.0, 0.1), d), sleeve, parent)
 
 
+def posable_hand(skin, cuff, sleeve, parent, origin, scale):
+    """Hand gripping the vertical handle bar at `origin`, built as jointed parts for the pose tool (KIT_ADOPTION Q8).
+    Nodes (names are read by js/scene3d.js): grip (whole hand, pivot on the bar) > palm, finger_0..3 (pivot at the
+    knuckle, curl turns round the bar), thumb (pivot at its base), wrist (pivot at the wrist) > wrist box, cuff, forearm."""
+    grip = lib.empty("grip", origin, parent)
+    grip.scale = (scale, scale, scale)
+    lib.mesh_obj("palm", lib.merge(lib.box(0.2, 0.4, 0.46, (-0.14, 0.0, 0.0), bevel=0.02),
+                                   lib.box(0.12, 0.12, 0.46, (-0.06, -0.15, 0.0), bevel=0.02)), skin, grip)
+    for i in range(4):
+        z = 0.17 - i * 0.115
+        piv = Vector((-0.1, -0.17, z))
+        f = lib.empty(f"finger_{i}", piv, grip)
+        def R(x, y, zz):
+            return Vector((x, y, zz)) - piv
+        lib.mesh_obj(f"finger_{i}_mesh", lib.merge(lib.box(0.24, 0.1, 0.095, R(0.0, -0.17, z), bevel=0.012),
+                                                    lib.box(0.09, 0.17, 0.09, R(0.1, -0.07, z), bevel=0.012)), skin, f)
+    tp = Vector((-0.1, 0.07, 0.3))
+    th = lib.empty("thumb", tp, grip)
+    lib.mesh_obj("thumb_mesh", lib.merge(lib.box(0.26, 0.1, 0.1, Vector((0.0, 0.08, 0.3)) - tp, rot=(0, 0.25, 0), bevel=0.012),
+                                          lib.box(0.12, 0.09, 0.09, Vector((0.15, 0.06, 0.27)) - tp, bevel=0.01)), skin, th)
+    wp = Vector((-0.24, 0.0, 0.05))
+    wr = lib.empty("wrist", wp, grip)
+    lib.mesh_obj("wrist_mesh", lib.box(0.26, 0.34, 0.34, Vector((-0.33, 0.0, 0.05)) - wp, rot=(0, -0.2, 0), bevel=0.02), skin, wr)
+    lib.mesh_obj("cuff_mesh", lib.box(0.12, 0.44, 0.44, Vector((-0.48, 0.0, 0.11)) - wp, rot=(0, -0.35, 0), bevel=0.015), cuff, wr)
+    d = Vector((-math.cos(0.35), 0, -math.sin(0.35)))
+    lib.mesh_obj("forearm_mesh", lib.prism(0.2, 0.27, 3.4, 6, Vector((-0.52, 0.0, 0.1)) - wp, d), sleeve, wr)
+    return grip
+
+
 def build_pitcher():
     lib.reset()
     steel = lib.material("steel", lib.save_texture("steel", lib.paint_steel(0xC3C8CC, 11)), roughness=0.42, metallic=0.12)
@@ -96,7 +125,7 @@ def build_pitcher():
     lib.mesh_obj("handle", lib.merge(lib.box(0.1, 0.14, 0.75, (-0.78, 0, 0.68), bevel=0.015),
                                      lib.box(0.3, 0.12, 0.09, (-0.64, 0, 0.98), bevel=0.01),
                                      lib.box(0.3, 0.12, 0.09, (-0.64, 0, 0.38), bevel=0.01)), steel_dark, root)
-    hand_parts(skin, cuff, sleeve, root, (-0.8, 0, 0.7), 1.3)
+    posable_hand(skin, cuff, sleeve, root, (-0.8, 0, 0.7), 1.3)
     lib.empty("spout_tip", (0.48 * 1.55, 0, 1.42), root)
     return root
 

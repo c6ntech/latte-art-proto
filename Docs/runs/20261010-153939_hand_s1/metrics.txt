@@ -1,0 +1,1 @@
+match 0.58 · coverage 0.41 (target 0.36) · width 0.67 (target 0.68) · height 0.79 (target 0.67) · symmetry 0.40 (target 0.44) · offset 0.14 (target 0.01) · leaves 3.00 (target 3.00)

@@ -1,0 +1,24 @@
+{
+ "tag": "play_s2",
+ "query": "hand=1&play=1",
+ "version": "v1010-1538 · 3D",
+ "result": "牛奶落在甜蜜點的時間：97%（門檻 80%） | 成功",
+ "metrics": {
+  "coverage": 0.39242919389978215,
+  "width": 0.6666666666666666,
+  "height": 0.75,
+  "offset": 0.06324870526228309,
+  "symmetry": 0.4622019279553526,
+  "leaves": 3.0,
+  "match": 0.7542857142857143
+ },
+ "target": {
+  "coverage": 0.3600217864923747,
+  "width": 0.6805555555555556,
+  "height": 0.6666666666666666,
+  "offset": 0.011219763258401582,
+  "symmetry": 0.4416575790621592,
+  "leaves": 3.0
+ },
+ "summary": "play_s2: 牛奶落在甜蜜點的時間：97%（門檻 80%） | 成功 · match 0.75 · coverage 0.39 (target 0.36) · width 0.67 (target 0.68) · height 0.75 (target 0.67) · symmetry 0.46 (target 0.44) · offset 0.06 (target 0.01) · leaves 3.00 (target 3.00)"
+}

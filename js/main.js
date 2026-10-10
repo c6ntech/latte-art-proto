@@ -36,8 +36,26 @@ let lastErr = null;
 // ---------- 設定（可開關） ----------
 const settings = { showTarget: true, invertY: false, debug: false, maxDeg: TUNING.tilt.maxDeg, view: '3d' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('latte.settings.v2')||'{}')); } catch(e){}
-function saveSettings(){ try{ localStorage.setItem('latte.settings.v2', JSON.stringify(settings)); }catch(e){} }
+function saveSettings(){ if((typeof SHOT !== 'undefined' && SHOT) || params.get('replay')) return; try{ localStorage.setItem('latte.settings.v2', JSON.stringify(settings)); }catch(e){} }
 if(params.get('view') === '2d' || params.get('view') === '3d') settings.view = params.get('view');
+// ?shot=1: fixed capture mode for tools/shot.sh (no guide ring; nothing saved)
+const SHOT = params.get('shot') === '1';
+if(SHOT) settings.showTarget = false;
+let grabWanted = false, grabbed = null;   // a PNG of the latte surface, taken in the frame it is rendered
+// Phone data (KIT_ADOPTION Q9, T002/T003): every pour records tilt at ~30 Hz; ?replay=<json url> plays a recording back.
+// Replay rules: only by URL flag, REPLAY badge, never writes settings, one recording per page load.
+const REPLAY = params.get('replay');
+let rec = null, lastRun = null, replayData = null;
+if(REPLAY) fetch(REPLAY).then(r => r.json()).then(d => {
+  replayData = d;
+  if(d.set){ settings.maxDeg = d.set.maxDeg ?? settings.maxDeg; settings.invertY = !!d.set.invertY; }
+}).catch(e => console.error('replay load failed', e));
+function replayTilt(d, ts){
+  const T = d.tt; if(!T.length) return { x: 0, y: 0 };
+  let i = 1; while(i < T.length - 1 && T[i] < ts) i++;
+  const a = i - 1, u = Math.max(0, Math.min(1, (ts - T[a]) / Math.max(1e-6, T[i] - T[a])));
+  return { x: d.tx[a] + (d.tx[i] - d.tx[a])*u, y: d.ty[a] + (d.ty[i] - d.ty[a])*u };
+}
 let VIEW3D = settings.view !== '2d';
 
 // ---------- 物件 ----------
@@ -55,7 +73,7 @@ let t = 0, lastTs = 0, sinceStart = 0;
 let score = null, prevRel = null, prevCup = null, tipFrames = 0;
 let steam = { held:false, progress:0 };
 let drift = [0,0,0,0,0,0];
-let layerIdx = -1, depositing = false;   // each low "push" of the continuous pour is its own foam layer (D010)
+let layerIdx = -1, depositing = false, goalFront = 0;   // each low "push" of the continuous pour is its own foam layer (D010)
 const smoothstep = (a, b, x) => { const u = Math.max(0, Math.min(1, (x-a)/(b-a))); return u*u*(3-2*u); };
 let fps = 0, fpsN = 0, fpsT = 0;
 
@@ -128,6 +146,11 @@ $('set-deg').value = String(settings.maxDeg); $('set-deg').addEventListener('cha
 $('set-view').value = VIEW3D ? '3d' : '2d'; $('set-view').addEventListener('change', e => { settings.view = e.target.value; saveSettings(); location.reload(); });
 $('build').textContent = `v${VERSION} · ${VIEW3D ? '3D' : '2D'}`;
 $('ready-title').textContent = pattern.name;
+if(REPLAY) $('build').textContent += ' · REPLAY';
+$('btn-data').addEventListener('click', () => {
+  if(!lastRun) return; const txt = JSON.stringify(lastRun); const out = $('data-out'); out.value = txt; out.hidden = false; out.select();
+  try { navigator.clipboard.writeText(txt).then(() => { $('btn-data').textContent = '已複製，貼給 Claude'; }, () => {}); } catch(e){}
+});
 $('debug').hidden = !settings.debug;
 for(const b of document.querySelectorAll('.btn-settings')) b.addEventListener('click', () => { $('settings').hidden = !$('settings').hidden; });
 $('btn-close-settings').addEventListener('click', () => { $('settings').hidden = true; });
@@ -137,8 +160,9 @@ function startPour(){
   if(!fluid && !initFluid()) return;
   fluid.reset(); t = 0; sinceStart = 0; prevRel = null; prevCup = null; tipFrames = 0;
   score = { inTime:0, pourTime:0, samples:[], spilled:false };
-  drift = drift.map(() => Math.random()*Math.PI*2);
-  layerIdx = -1; depositing = false;
+  drift = replayData && replayData.drift ? replayData.drift.slice() : drift.map(() => Math.random()*Math.PI*2);
+  rec = { tt: [], tx: [], ty: [], next: 0 };
+  layerIdx = -1; depositing = false; goalFront = 0; if(fluid && fluid.goal) fluid.setGoalFront(0);
   cup.scale = 1; steam.progress = 0; $('steam-done').hidden = true;
   setState('pour');
 }
@@ -197,10 +221,12 @@ function frame(ts){
     const px = home.x + (s.x+nx)*cup.R, py = home.y + (s.y+ny)*cup.R;
     let r;
     if(DEV.hand){ tilt.mock = handTilt(sinceStart, dt, lastErr); }
+    if(replayData){ tilt.mock = replayTilt(replayData, sinceStart); }
     // perfect play: the cup is held still at home (the pitcher stays put and only the cup drifts, D001)
     if(DEV.auto){ cup.x = home.x; cup.y = home.y; cup.tiltX = cup.tiltY = 0; r = {rawX:0,rawY:0}; cup.vx = cup.vy = 0; prevCup={x:cup.x,y:cup.y}; }
     else r = cupFromTilt(dt);
     pitcher = { x:px, y:py, flow:s.flow*LEVEL.flowRate, h:s.h, prep:s.prep, prepDir:s.prepDir };
+    if(rec && sinceStart >= rec.next){ rec.tt.push(+sinceStart.toFixed(3)); rec.tx.push(+(r.rawX || 0).toFixed(2)); rec.ty.push(+(r.rawY || 0).toFixed(2)); rec.next = sinceStart + 1/30; }
     if(!DEV.auto && checkTip(r)){ score.spilled = true; endPour(); }
     else {
       const T = TUNING.target;
@@ -232,6 +258,8 @@ function frame(ts){
         const surf = 1 - smoothstep(P.sinkH[0], P.sinkH[1], h), dep = f*surf;
         amount *= Math.max(P.sinkTint, surf); push *= Math.max(P.pushMinSurf, surf);
         if(dep > P.layerOn && !depositing){ depositing = true; layerIdx++; } else if(dep < P.layerOff) depositing = false;
+        if(dep > P.layerOff && fluid.goal){ goalFront = Math.max(goalFront, v); fluid.setGoalFront(goalFront); }   // progressive reveal
+        if(fluid.goal && pattern.revealAllAt !== undefined && t >= pattern.revealAllAt) fluid.setGoalFront(2.0);
         let vx = rvx*P.momentum, vy = P.jetDir*jet + rvy*P.momentum;
         if(fuzz > 0){ // 落在甜蜜點外：亂流、奶泡沉下去、圖案糊掉（依出界距離漸進）
           const a = Math.random()*Math.PI*2; vx += Math.cos(a)*P.fuzzJet*fuzz; vy += Math.sin(a)*P.fuzzJet*fuzz;
@@ -240,7 +268,7 @@ function frame(ts){
         const clampV = Math.min(1.2, Math.hypot(vx,vy)); const L = Math.hypot(vx,vy)||1; vx = vx/L*clampV; vy = vy/L*clampV;
         const lid = s.L !== undefined ? s.L : Math.max(0, layerIdx);   // pattern data may name the layer (one leaf per wiggle)
         const ids = pattern.layerIds || P.layerIds;
-        fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount, ids[lid % ids.length]);
+        fluid.splat(u, v, vx, vy, P.jetSigma*(1+0.3*f), dyeR, amount, ids[lid % ids.length], inside ? 1 : 0, surf);   // quality 0 outside the sweet spot: guidance never repairs that stretch (D014)
         fluid.setPush(u, v, P.pushSigma, push, P.pushR0);
         // conveyor toward the player (UV -v), only while milk is surfacing (low pour)
         fluid.setConveyor(0, P.jetDir < 0 ? -1 : 1, P.conveyor*f*surf*LEVEL.flowRate, P.conveyorW, P.conveyorL);
@@ -261,12 +289,13 @@ function frame(ts){
     else { cup.x += (home.x - cup.x)*k; cup.y += (home.y*0.72 - cup.y)*k; cup.scale += (1.28 - cup.scale)*k; }
     cup.ax = cup.ay = 0;
   }
-  if(state==='ready'){ pitcher = { x: home.x + 0.0*cup.R, y: home.y - 0.25*cup.R, flow:0, h:0.9, prep:0, prepDir:[0,0] }; }
+  if(state==='ready'){ const pp = POSE && posePour; pitcher = { x: home.x + 0.0*cup.R, y: home.y - 0.25*cup.R, flow: pp ? 0.8 : 0, h: pp ? 0.35 : 0.9, prep:0, prepDir:[0,0] }; }
 
   // 繪製
   const targetLevel = settings.showTarget && state==='pour' ? (insideNow ? 1.6 : 0.9) : 0;
   if(scene3d){
     if(fluid) fluid.render(targetLevel, targetEll());   // into the small canvas; read by three.js in the same frame
+    if(grabWanted && fluid){ grabbed = glCanvas.toDataURL('image/png'); grabWanted = false; }
     scene3d.render({ cup, home, pitcher, state, dt, outside });
   } else {
     glCanvas.style.transform = `translate(${cup.x-cup.R}px, ${cup.y-cup.R}px) scale(${cup.scale})`;
@@ -290,6 +319,10 @@ function endPour(){
   $('reveal-pattern').textContent = pattern.name;
   setState('reveal');
   drawTimeline(score.samples, score.spilled);
+  lastRun = { v: VERSION, p: pattern.id, ua: navigator.userAgent.slice(0, 90), dpr: window.devicePixelRatio,
+    set: { maxDeg: settings.maxDeg, invertY: settings.invertY, view: VIEW3D ? '3d' : '2d' }, drift: drift.map(x => +x.toFixed(4)),
+    hz: Math.round(tilt.hz), fps: Math.round(fps), ratio: +ratio.toFixed(3), spilled: score.spilled, replay: !!replayData, ...rec };
+  delete lastRun.next;
 }
 function drawTimeline(samples, spilled){
   const c = $('timeline'); const ctx = c.getContext('2d'); const w = c.width = c.clientWidth*2, h = c.height = 28;
@@ -315,7 +348,47 @@ if(VIEW3D && fluid){
   catch(e){ console.error(e); VIEW3D = false; fluid.setPixelOut(0); glCanvas.style.display = ''; $('fg').style.display = ''; $('build').textContent = `v${VERSION} · 2D（3D 啟動失敗）`; }
   layout();
 }
-window.__latte = { get scene3d(){ return scene3d; }, get fps(){ return fps; } };   // dev probe for tools/sim.sh
+// Guided simulation (D014): the pattern's target image steers good-quality milk; ?guide=0 turns it off (before/after).
+const GUIDE = params.get('guide') !== '0' && !!pattern.target;
+if(fluid && GUIDE){
+  const img = new Image();
+  img.onload = () => { fluid.setGoal(img, TUNING.guide.strength, TUNING.guide.covR, TUNING.guide.covT); fluid.opts.layerLine = 99; };
+  img.src = `${pattern.target}?v=${VERSION}`;
+}
+// Hand pose (KIT_ADOPTION Q8): assets/poses/hand.json is the committed pose; ?pose=1 opens the slider tool.
+const POSE = params.get('pose') === '1';
+const POSE_KEYS = [['fingerCurl', '手指彎曲（°）', -40, 60, 1], ['thumbSwing', '拇指左右（°）', -45, 45, 1], ['thumbLift', '拇指上下（°）', -30, 30, 1],
+  ['wristPitch', '手腕上下（°）', -45, 45, 1], ['wristYaw', '手腕左右（°）', -45, 45, 1], ['handRoll', '整隻手繞把手轉（°）', -60, 60, 1],
+  ['gripY', '握的高度', -0.3, 0.3, 0.01], ['scale', '手的大小', 0.8, 1.4, 0.01]];
+let pose = { fingerCurl: 0, thumbSwing: 0, thumbLift: 0, wristPitch: 0, wristYaw: 0, handRoll: 0, gripY: 0, scale: 1 }, posePour = true;
+fetch(`assets/poses/hand.json?v=${VERSION}`).then(r => r.ok ? r.json() : null).catch(() => null).then(p => {
+  if(p) Object.assign(pose, p);
+  if(scene3d) scene3d.setPose(pose);
+  if(POSE) buildPosePanel();
+});
+function buildPosePanel(){
+  const el = $('posepanel'); el.hidden = false;
+  const rows = POSE_KEYS.map(([k, label, lo, hi, st]) => `<label><span>${label} <b id="pv-${k}">${pose[k]}</b></span><input type="range" id="pr-${k}" min="${lo}" max="${hi}" step="${st}" value="${pose[k]}"></label>`).join('');
+  el.innerHTML = `<div class="pose-head"><b>手的姿勢</b><span><button id="pose-cam" class="ghost">遊戲鏡頭</button> <button id="pose-pour" class="ghost">不倒</button></span></div>${rows}
+    <div class="pose-head"><button id="pose-copy">複製姿勢</button><button id="pose-reset" class="ghost">重設</button></div><textarea id="pose-out" readonly hidden></textarea>`;
+  for(const [k] of POSE_KEYS){
+    $('pr-' + k).addEventListener('input', e => { pose[k] = +e.target.value; $('pv-' + k).textContent = pose[k]; if(scene3d) scene3d.setPose(pose); });
+  }
+  $('pose-cam').addEventListener('click', e => { scene3d.closeUp = !scene3d.closeUp; e.target.textContent = scene3d.closeUp ? '遊戲鏡頭' : '近拍'; });
+  $('pose-pour').addEventListener('click', e => { posePour = !posePour; e.target.textContent = posePour ? '不倒' : '倒奶'; });
+  $('pose-reset').addEventListener('click', () => { for(const [k] of POSE_KEYS){ pose[k] = k === 'scale' ? 1 : 0; $('pr-' + k).value = pose[k]; $('pv-' + k).textContent = pose[k]; } scene3d.setPose(pose); });
+  $('pose-copy').addEventListener('click', () => {
+    const txt = JSON.stringify(pose); const out = $('pose-out'); out.value = txt; out.hidden = false; out.select();
+    try { navigator.clipboard.writeText(txt).then(() => { $('pose-copy').textContent = '已複製'; }, () => {}); } catch(e){}
+  });
+  if(scene3d) scene3d.closeUp = true;
+  setState('ready'); $('scr-ready').hidden = true;
+}
+window.__latte = {   // dev probe for tools/sim.sh and tools/shot.sh
+  get scene3d(){ return scene3d; }, get fps(){ return fps; }, get state(){ return state; }, targetPath: pattern.target, guided: GUIDE,
+  get progress(){ return state === 'pour' ? Math.min(1, t / pattern.duration) : (state === 'reveal' ? 1 : 0); },
+  grab(){ grabbed = null; grabWanted = true; }, get grabbed(){ return grabbed; }, get lastRun(){ return lastRun; }
+};
 if(DEV.auto || DEV.hand){ tilt.mock = {x:0,y:0}; }
 setState('intro');
 requestAnimationFrame(frame);
